@@ -57,8 +57,11 @@ The rest of this document specifies Phase 1 in detail.
 - **Source:** Monteggia fracture X-ray dataset ([paper][mfxr-paper],
   [data][mfxr-data]), CC BY 4.0, public since 2026-07-18.
   This is after the Opus 5.5 training cutoff (June 2026).
-- **Content:** 4,586 pediatric forearm radiographs from 1,482 patients
-  at one hospital (Shenzhen Children's Hospital).
+- **Content:** 4,586 pediatric forearm radiographs at one hospital
+  (Shenzhen Children's Hospital). The paper reports 1,482 patients;
+  the release has 1,484 patient identifiers (993 train, 491 test).
+  Use the release identifiers, as approved by the investigator,
+  and report this discrepancy.
   The label is Monteggia fracture versus control;
   controls include normal forearms and other fractures.
   Labels were assigned by a pediatric orthopedist from the image
@@ -112,7 +115,9 @@ where a local proxy sees only the provider's API call.
 Enforcement therefore has four layers:
 
 1. **Container with a single exit.**
-   Each session runs in a rootless podman container with GPU access.
+   Each session runs in a hardened, nonroot Docker container with GPU
+   access. Docker replaces Podman by investigator approval; the existing
+   rootful Docker daemon is part of the trusted host, not rootless isolation.
    The container sits on an internal network
    whose only route out is a mitmproxy container.
    Connections that bypass the proxy fail.
@@ -197,9 +202,16 @@ Arm notes:
   GRAZPEDWRI-DX, FracAtlas, and MURA.
   Pretrain on them, then fine-tune on the k labels.
 - **F and G** are described in section 7.
-- **Weight provenance:** every final weight in F and G is tagged
-  as written by the LLM, closed-form fit, or gradient training.
-  The tag is recorded by the harness, not by the agent's report alone.
+- **Weight provenance:** F and G retain unrestricted experimentation
+  within the study rules; a restricted fitting/editing service is not used.
+  F is prohibited from direct weight writes; G is permitted them.
+  The trusted harness records tool/session history and checkpoint lineage
+  outside agent write access. Audit attributes changes to direct
+  LLM-prescribed edits, closed-form fitting or gradient training,
+  retaining mixed ancestry and explicitly marking unknown attribution.
+  This is audited provenance, not a technical proof of each weight's origin.
+  The investigator-approved evidence boundary is specified in
+  [ADR-001](docs/decisions.md#adr-001-unrestricted-fg-experimentation-with-protected-audit-records).
 
 ### 6.1 Encoders
 
@@ -225,6 +237,12 @@ Arm notes:
 - Each session runs in its own container (section 5.2)
   with its own workspace, no access to `data/locked/`,
   and network access only through the proxy.
+- Agents and their subagents cannot write, delete, replace or disable
+  authoritative Pi histories, audit records, or trusted harness code and
+  configuration. A trusted supervisor/recorder outside their writable
+  execution sandbox retains full history and artifact hashes; experimental
+  scripts and workspace snapshots supplement the tool-call record.
+  Log-integrity and event-completeness checks are launch prerequisites.
 - Each session gets a fixed GPU share.
   F and G at the same k run at the same time with the same share
   (for example, 12 GB VRAM each).
@@ -297,6 +315,9 @@ The orchestrator is the agent that the investigator talks to.
   That is 4 sessions of 24 hours.
   Run F and G for one k in parallel, then the other k:
   about 2 days in total.
+- At k = 0, methods requiring target labels are not applicable.
+  Applicable zero-shot methods use no target-label tuning or model selection
+  and a preregistered fixed decision threshold.
 - The F and G resamples use the same labeled patients
   as resample 1 of the other arms.
 

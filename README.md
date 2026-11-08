@@ -34,5 +34,13 @@ for Monteggia fracture classification.
 Later phases will address knee MRI and detection or segmentation tasks.
 
 The study design is in [plan.md](plan.md).
+The current [setup checkpoint](docs/setup-status.md) records completed
+preparation, storage policy, validation evidence, and launch blockers.
+See [data preparation](docs/data-preparation.md) for the acquisition CLI
+and [sandbox status](docs/sandbox.md) for containment testing.
+The [decision record](docs/decisions.md) specifies protected audit history
+for unrestricted F/G experimentation. The [versioning plan](docs/versioning-policy.md)
+separates Git, DVC, protected live state, and disposable local assets.
+The repository is not yet ready to launch the pilot.
 
 [wsp]: https://rikiyat.github.io/blog/weight-space-programming/
