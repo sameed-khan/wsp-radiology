@@ -52,6 +52,45 @@ versions are pinned; transitive apt dependencies and repositories are not
 snapshot-pinned. Rebuilds may fail if versions disappear or may differ in
 transitive dependencies. Host package trust must not be bypassed.
 
+## Step 2 transport prototype — NOT launch-ready
+
+`infra/proxy/Dockerfile` builds a digest-pinned mitmproxy image; its addon
+only logs completed HTTP responses and **does not block any URL, destination,
+content or upload**. Do not attach an untrusted agent. The logging skeleton
+records host, path without query, URL hash, sizes, status and content hash;
+paths can themselves contain secrets, and error/incomplete flows are not yet
+recorded. Proxy diagnostic output may also contain sensitive information and
+must remain host-only. Step 3 must implement and review the full policy and
+fail-closed, complete logging before use.
+
+Generate an installation CA on the trusted host with
+`python -m infra.proxy.ca /private/new-ca-dir /public/new-ca-dir` (both paths
+must not already exist). The private directory is 0700 and contains the proxy
+CA private key; mount it **only** into the proxy at `/var/lib/wsp-ca`. Mount
+only the public directory read-only into the client at `/opt/wsp-ca`; configure
+`REQUESTS_CA_BUNDLE`, `SSL_CERT_FILE`, `CURL_CA_BUNDLE`, `PIP_CERT`,
+`NODE_EXTRA_CA_CERTS`, and `GIT_SSL_CAINFO` to `/opt/wsp-ca/bundle.pem`.
+Protect the private CA from all agents and rotate it if exposed. The bundle
+combines the host's system CA bundle with this installation's public CA;
+regenerate/update the bundle when system trust changes. Keep logs outside the
+agent as well. The CA utility expects trusted parent directories and creates
+fresh paths; a failed generation may leave partial directories to remove.
+
+Build with `docker build -f infra/proxy/Dockerfile -t wsp-proxy:step2 .` and
+run `uv run --extra test pytest -s -q tests/infra/test_proxy_step2_docker.py`
+after building `wsp-agent-base:step1` using `infra/agent/Dockerfile`. The live
+test uses an isolated internal network and an egress-attached proxy, verifies
+CA-validated curl, requests and pip download, verifies curl rejects the
+interception CA without the bundle, checks direct TCP port 443 to 1.1.1.1,
+host IPv4 addresses and the conventional Docker gateway and direct UDP DNS to
+8.8.8.8, and checks that query parameters do not appear in response logs. It
+removes its disposable resources, including `wsp-egress` only if it created
+it. Docker embedded DNS from the internal-only client did **not** resolve
+`pypi.org` in the observed test; the proxy resolved it from the egress network.
+This observation is host/configuration dependent and does not establish a
+DNS security boundary. The TCP probes do not exhaust all host ports, addresses,
+IPv6, or protocols. No private destination blocking is implemented yet.
+
 ## Mandatory blockers before any networked launch
 
 * Design, implement, and independently review a separate TLS-intercepting
