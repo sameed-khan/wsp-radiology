@@ -1,0 +1,28 @@
+# Offline containment test only. This is not an agent launch configuration.
+services:
+  sandbox:
+    build:
+      context: .
+    networks:
+      - isolated
+    dns:
+      - 127.0.0.1
+    user: "65534:65534"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    volumes:
+      - type: bind
+        source: ${SANDBOX_WORKSPACE:?Set SANDBOX_WORKSPACE to a disposable workspace}
+        target: /workspace
+networks:
+  isolated:
+    internal: true
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.gateway_mode_ipv4: isolated
