@@ -23,7 +23,7 @@ def test_cache_retry_and_resume(tmp_path, monkeypatch):
     calls = []
     def fake_run(command, **kwargs):
         calls.append(command)
-        return SimpleNamespace(stdout='bad' if len(calls) == 1 else '{"p_monteggia":50}')
+        return SimpleNamespace(stdout='bad' if len(calls) == 1 else '{"p_monteggia":50}', stderr='')
     monkeypatch.setattr(arm_d_labels.subprocess, 'run', fake_run)
     result = arm_d_labels.run(tmp_path, workers=1)
     assert result['new'] == 3 and result['failed'] == 0 and len(calls) == 4
