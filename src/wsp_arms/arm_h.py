@@ -4,6 +4,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+import sys
 import time
 from pathlib import Path
 
@@ -50,9 +51,32 @@ def pretrain_dir(paths, enc, sample_size):
 class ExternalTrainSet(arm_b.TrainSet):
     def __getitem__(self, i):
         # Some public source JPEGs are truncated; match Pillow's permissive decoding.
-        from PIL import ImageFile
+        from PIL import Image, ImageFile
+        from wsp_ml.encoders import preprocess
         ImageFile.LOAD_TRUNCATED_IMAGES = True
-        return super().__getitem__(i)
+        j = self.order[i]
+        try:
+            with Image.open(self.files[j]) as im:
+                im.load()
+                im = im.convert('RGB')
+        except (OSError, ValueError, SyntaxError, Image.DecompressionBombError) as exc:
+            return None, str(self.files[j]), f'{type(exc).__name__}: {exc}'
+        if self.aug:
+            im = arm_b.augment(im, np.random.default_rng((self.seed, i)), self.enc)
+        import torch
+        return preprocess(im, self.enc), torch.tensor(int(self.labels[j])), None
+
+
+def collate_external(batch):
+    from torch.utils.data._utils.collate import default_collate
+    bad = [(path, error) for image, path, error in batch if image is None]
+    good = [(image, label) for image, label, error in batch if image is not None]
+    return (default_collate(good) if good else None), bad
+
+
+def check_skip_limit(skipped, total):
+    if skipped * 200 > total:
+        raise ValueError(f'arm H skipped {skipped}/{total} images (> 0.5%)')
 
 
 def pretrain(enc, paths=None, sample_size=40000, force=False, micro_batch=None):
@@ -63,7 +87,10 @@ def pretrain(enc, paths=None, sample_size=40000, force=False, micro_batch=None):
     marker, checkpoint = out / 'pretrain.json', out / 'transfer.safetensors'
     if not force and marker.exists() and checkpoint.exists():
         rec = json.loads(marker.read_text())
-        if rec.get('status') == 'complete' and core.sha256_file(checkpoint) == rec['checkpoint_sha256']:
+        current_hashes = {name: core.sha256_file(paths.root / 'features/external-manifests' / f'{name}.csv')
+                          for name in DATASETS}
+        if (rec.get('status') == 'complete' and rec.get('manifest_sha256') == current_hashes
+                and core.sha256_file(checkpoint) == rec['checkpoint_sha256']):
             return rec
     marker.unlink(missing_ok=True)
     started = time.monotonic()
@@ -76,7 +103,8 @@ def pretrain(enc, paths=None, sample_size=40000, force=False, micro_batch=None):
         raise ValueError('micro batch must divide 16')
     # TrainSet makes an independent seeded permutation: each sampled image appears exactly once.
     ds = ExternalTrainSet(enc, files, labels, SAMPLE_SEED, len(files))
-    loader = torch.utils.data.DataLoader(ds, batch_size=mb, shuffle=False, num_workers=4)
+    loader = torch.utils.data.DataLoader(ds, batch_size=16, shuffle=False, num_workers=4,
+                                         collate_fn=collate_external)
     opt = torch.optim.AdamW(groups, weight_decay=arm_b.RECIPE['weight_decay'])
     base_lrs = [g['lr'] for g in opt.param_groups]
     weights = torch.tensor(arm_b.class_weights(labels), device='cuda')
@@ -85,21 +113,27 @@ def pretrain(enc, paths=None, sample_size=40000, force=False, micro_batch=None):
     model.train()
     train_start = time.monotonic()
     losses = []
-    iterator = iter(loader)
-    for step in range(steps):
-        size = min(16, len(files) - step * 16)
+    skipped = []
+    for step, (batch, bad) in enumerate(loader):
+        for path, error in bad:
+            skipped.append({'file': path, 'error': error})
+            print(f'arm H skipped undecodable image {path}: {error}', file=sys.stderr, flush=True)
+        # Denominator is the complete sampled population, not the prefix processed so far.
+        check_skip_limit(len(skipped), len(files))
+        if batch is None:
+            continue
+        x, y = batch
+        size = len(y)
         for g, lr in zip(opt.param_groups, base_lrs):
             g['lr'] = lr * tr._schedule(step, steps, arm_b.RECIPE['warmup'])
         opt.zero_grad(set_to_none=True)
-        seen, total = 0, 0.0
-        while seen < size:
-            x, y = next(iterator)
+        total = 0.0
+        for start in range(0, size, mb):
             with torch.autocast('cuda', dtype=torch.bfloat16):
-                logits = model(x.cuda())
-            loss = torch.nn.functional.cross_entropy(logits.float(), y.cuda(), weight=weights, reduction='sum') / size
+                logits = model(x[start:start + mb].cuda())
+            loss = torch.nn.functional.cross_entropy(logits.float(), y[start:start + mb].cuda(), weight=weights, reduction='sum') / size
             loss.backward()
             total += float(loss.detach())
-            seen += len(y)
         opt.step()
         losses.append(total)
     torch.cuda.synchronize()
@@ -115,8 +149,9 @@ def pretrain(enc, paths=None, sample_size=40000, force=False, micro_batch=None):
            'sample_sha256': core.sha256_text([str(p.relative_to(paths.root)) + ':' + str(y) for p, y in rows]),
            'manifest_sha256': hashes, 'source_counts': counts, 'sample_class_counts': [labels.count(0), labels.count(1)],
            'recipe': arm_b.RECIPE, 'steps': steps, 'class_weights': arm_b.class_weights(labels),
-           'train_seconds': train_sec, 'images_per_second': len(files) / train_sec,
-           'estimated_40000_train_hours': 40000 / (len(files) / train_sec) / 3600,
+           'skipped_images': skipped, 'trained_images': len(files) - len(skipped),
+           'train_seconds': train_sec, 'images_per_second': (len(files) - len(skipped)) / train_sec,
+           'estimated_40000_train_hours': 40000 / ((len(files) - len(skipped)) / train_sec) / 3600,
            'peak_vram_gb': torch.cuda.max_memory_allocated() / 2**30,
            'loss_all_finite': bool(np.isfinite(losses).all()), 'checkpoint_sha256': core.sha256_file(checkpoint),
            'total_seconds': time.monotonic() - started, 'code': core.code_revision()}

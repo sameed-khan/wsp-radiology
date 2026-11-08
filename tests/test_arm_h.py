@@ -29,6 +29,20 @@ def test_sample_is_seeded_without_replacement_and_counts(tmp_path):
         arm_h.external_sample(paths, 31)
 
 
+def test_decode_skip_and_threshold(tmp_path):
+    from PIL import Image
+    good, bad = tmp_path / 'ok.png', tmp_path / 'bad.png'
+    Image.new('RGB', (8, 8)).save(good)
+    bad.write_bytes(b'not an image')
+    ds = arm_h.ExternalTrainSet('skelex', [good, bad], [0, 1], 7, 2, aug=False)
+    decoded, errors = arm_h.collate_external([ds[i] for i in range(2)])
+    assert len(decoded[1]) == 1 and errors[0][0] == str(bad)
+    assert arm_h.collate_external([ds[ds.order.index(1)]])[0] is None
+    arm_h.check_skip_limit(1, 200)
+    with pytest.raises(ValueError, match='0.5%'):
+        arm_h.check_skip_limit(2, 200)
+
+
 def test_manifest_rejects_escape(tmp_path):
     paths = manifests(tmp_path)
     with (tmp_path / 'features/external-manifests/MURA.csv').open('a') as f:

@@ -9,7 +9,7 @@ import pytest
 from infra import sandbox as sbx
 
 pytestmark = pytest.mark.docker
-AGENT_IMAGE = "wsp-agent-base:step1"
+AGENT_IMAGE = "wsp-agent:phase1"
 
 
 def dk(*a, check=True):

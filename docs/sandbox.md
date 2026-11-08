@@ -4,6 +4,33 @@ The networked implementation and its end-to-end tests are described in Steps 4â€
 below. Launch remains blocked by the outstanding calibration, integration and
 red-team work described there. Independent code review was waived.
 
+## Phase 1 image build (2026-11-08)
+
+Built from committed tree `36bec83` with `git archive HEAD` piped to each
+Docker build (no ignored data or host credentials in the context):
+
+```sh
+git archive HEAD | docker build -f infra/agent/Dockerfile -t wsp-agent-base:phase1 -
+git archive HEAD | docker build -f infra/agent/Dockerfile.toolkit --build-arg BASE_IMAGE=wsp-agent-base:phase1 -t wsp-agent:phase1 -
+git archive HEAD | docker build -f infra/proxy/Dockerfile -t wsp-proxy:phase1 -
+```
+
+Local image IDs / repository digests as reported by `docker image inspect`:
+
+| Tag | ID / local repository digest (sha256) |
+|---|---|
+| `wsp-agent-base:phase1` | `ecc0d6ffc4f1fbf6c13a8e0a8df7b280291a9cb271a0b0b0b1b91a7fb158afe8` |
+| `wsp-agent:phase1` | `b53856a9bba52e3f7b40c336760089587c5b1ae33675aa5846320ac021c7631b` |
+| `wsp-proxy:phase1` | `0ba5936a53048910ab675d51d0201dee214455858137316120d9027fef9bf25d` |
+
+Tags are mutable; verify IDs against launch receipts before use. These are local
+build digests, not published registry attestations. BuildKit reused cached base
+and proxy layers; apt and transitive pip inputs are not fully snapshot-pinned.
+The toolkit layer was built from the committed tree. The phase1 agent and proxy
+passed the real-topology Haiku harness test and the Docker-marked suite; the
+historical step2 transport test still uses its step2/step1 images. These tests
+are not a red-team approval or a launch authorization.
+
 ## Historical offline containment fixture
 
 The following CPU-only offline smoke-test fixture is separate from the networked
@@ -138,7 +165,7 @@ removes labelled resources. CA is generated per installation in `state_dir/ca` (
 only `labels.csv`. `pause` freezes the agent only (proxy keeps running). Run the CLI with `python -m infra.sandbox`.
 Tests: `uv run --extra test pytest -q tests/infra/test_sandbox_step4_docker.py` (needs images `wsp-agent-base:step1`,
 `wsp-proxy:step3`). Limits: GPU watchdog/watcher are not launched by `create` (step 5; `state_dir/sandbox.json` holds the
-`container:cap` argument); the proxy image tag default is `wsp-proxy:step3`.
+`container:cap` argument); the proxy image tag default is now `wsp-proxy:phase1`.
 
 ## Step 5: workspace watcher and GPU watchdog (host processes)
 
@@ -176,7 +203,7 @@ narrowed (identity re-check) but not eliminated. Neither process is started by `
 
 `uv run --extra test pytest -q -m docker` runs all live Docker tests. The focused
 `uv run --extra test pytest -q -m docker tests/infra/test_e2e_sandbox_docker.py` (35 tests; needs Docker, the GPU,
-images `wsp-agent-base:step1` and `wsp-proxy:step3`; creates `wsp-egress` if absent and removes only what it created).
+images `wsp-agent:phase1` and `wsp-proxy:phase1`; creates `wsp-egress` if absent and removes only what it created).
 One module-scoped sandbox is created through `infra.sandbox.create()` (hardened GPU agent, internal network, policy
 proxy on `wsp-egress`); a synthetic test server on `wsp-egress` is exempted from private-destination refusal only by the
 TEST-ONLY `test_allow_ips` flag. Every request is issued from inside the agent as uid 1004. Covered (spec section 4 Tests):
@@ -199,6 +226,6 @@ TEST-ONLY `test_allow_ips` flag. Every request is issued from inside the agent a
 DNS: Docker's embedded DNS on the internal network does not resolve external names (tested at step 2 and in step 6);
 agents depend on the proxy resolving names. Residual risks: see the Limitations lists above (loopback inside the
 agent is NO_PROXY so agent-local services are reachable by design; calibrated pHash alerts require human review; watcher periodic; watchdog polling/PID-reuse; IPv6/non-443 ports not exhaustive; the proxy and agent
-images are tagged `step*` and not digest-pinned in the API; unhashed pip pins; no independent review was performed;
+images use mutable tags and are not digest-pinned in the API; unhashed pip pins; no independent review was performed;
 red-team of tool-level exfiltration channels (e.g. DNS tunnelling via the proxy's allowed domains, slow-drip uploads to
 allowed hosts) is not done).

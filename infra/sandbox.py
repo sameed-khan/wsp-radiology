@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 EGRESS_NETWORK = "wsp-egress"
-DEFAULT_PROXY_IMAGE = "wsp-proxy:step3"
+DEFAULT_PROXY_IMAGE = "wsp-proxy:phase1"
 AGENT_UID_GID = "1004:1004"
 PROXY_PORT = 8080
 CA_ENV = ("REQUESTS_CA_BUNDLE", "SSL_CERT_FILE", "CURL_CA_BUNDLE", "PIP_CERT", "NODE_EXTRA_CA_CERTS", "GIT_SSL_CAINFO")

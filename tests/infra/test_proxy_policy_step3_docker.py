@@ -21,8 +21,8 @@ import imagehash
 import random
 
 pytestmark = pytest.mark.docker
-PROXY_IMAGE = "wsp-proxy:step3"
-AGENT_IMAGE = "wsp-agent-base:step1"
+PROXY_IMAGE = "wsp-proxy:phase1"
+AGENT_IMAGE = "wsp-agent:phase1"
 MAX_BODY = 3_000_000
 
 SERVER = textwrap.dedent('''

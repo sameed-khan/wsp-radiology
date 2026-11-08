@@ -4,6 +4,8 @@ import hashlib
 from collections import Counter
 from pathlib import Path
 
+from PIL import Image, ImageFile
+
 IMAGE_SUFFIXES = {'.png', '.jpg', '.jpeg', '.bmp'}
 
 
@@ -52,13 +54,37 @@ def external_manifest(base, name):
         keys = [p.parent.relative_to(root).as_posix() for p in images]
     else:
         raise ValueError('invalid external dataset')
+    # Match training's permissive JPEG decoding, but force full pixel decoding.
+    # AppleDouble sidecars are never images even when named *.png.
+    kept_images, kept_keys = [], []
+    skipped_sidecar = skipped_undecodable = 0
+    previous = ImageFile.LOAD_TRUNCATED_IMAGES
+    ImageFile.LOAD_TRUNCATED_IMAGES = True
+    try:
+        for image, key in zip(images, keys):
+            if image.name.startswith('._'):
+                skipped_sidecar += 1
+                continue
+            try:
+                with Image.open(image) as im:
+                    im.load()
+                    im.convert('RGB')
+            except (OSError, ValueError, SyntaxError, Image.DecompressionBombError):
+                skipped_undecodable += 1
+                continue
+            kept_images.append(image)
+            kept_keys.append(key)
+    finally:
+        ImageFile.LOAD_TRUNCATED_IMAGES = previous
+    images, keys = kept_images, kept_keys
     if not images or set(keys) != set(labels):
         raise ValueError('external images and label entries do not match')
     if name != 'MURA' and len(keys) != len(set(keys)):
         raise ValueError('duplicate image identifiers')
     entries = [{'file': str(p.relative_to(base)), 'label': labels[k]} for p, k in zip(images, keys)]
     counts = Counter(item['label'] for item in entries)
-    return images, entries, {'images': len(entries), 'negative': counts[0], 'positive': counts[1], 'label_entries': len(labels)}
+    return images, entries, {'images': len(entries), 'negative': counts[0], 'positive': counts[1], 'label_entries': len(labels),
+                             'skipped_appledouble': skipped_sidecar, 'skipped_undecodable': skipped_undecodable}
 
 
 def write_manifests(base=None, out=None):

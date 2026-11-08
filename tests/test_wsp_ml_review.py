@@ -10,7 +10,11 @@ from wsp_ml.external import external_manifest
 
 def put(path, data='x'):
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(data)
+    if data == 'x' and path.suffix.lower() in ('.png', '.jpg'):
+        from PIL import Image
+        Image.new('RGB', (4, 4)).save(path)
+    else:
+        path.write_text(data)
 
 
 def test_external_manifests_and_invalid_entries(tmp_path):
@@ -24,11 +28,15 @@ def test_external_manifests_and_invalid_entries(tmp_path):
     put(m / 'train_labeled_studies.csv', 'MURA-v1.1/train/X/p/s/,1\n')
     put(m / 'valid_labeled_studies.csv', 'MURA-v1.1/valid/X/q/s/,0\n')
     for p in ('train/X/p/s/a.png', 'train/X/p/s/b.png', 'valid/X/q/s/c.png'): put(m / p)
+    put(m / 'train/X/p/s/._a.png', 'sidecar')
+    put(m / 'train/X/p/s/bad.png', 'junk')
     for name, labels in [('GRAZPEDWRI-DX', [1, 0]), ('FracAtlas', [1, 0]), ('MURA', [1, 1, 0])]:
         paths, entries, counts = external_manifest(tmp_path, name)
         assert [e['label'] for e in entries] == labels
         assert [e['file'] for e in entries] == [str(p.relative_to(tmp_path)) for p in paths]
         assert counts['images'] == len(entries)
+        if name == 'MURA':
+            assert counts['skipped_appledouble'] == counts['skipped_undecodable'] == 1
     put(f / 'images/duplicate/a.jpg', 'different')
     with pytest.raises(ValueError, match='conflicting'): external_manifest(tmp_path, 'FracAtlas')
     (f / 'images/duplicate/a.jpg').unlink()

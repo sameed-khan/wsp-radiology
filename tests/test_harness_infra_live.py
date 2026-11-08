@@ -30,7 +30,7 @@ def test_infra_launch_deadline(tmp_path):
                               text=True, capture_output=True, timeout=120)
     launch = cli('launch', '--arm', 'F', '--k', '10', '--labels', str(labels), '--pool', str(ROOT / 'data/pool'),
                  '--backend', 'infra', '--models-dir', str(ROOT / 'models'), '--external-dir',
-                 str(ROOT / 'data/external/extracted'), '--image', 'wsp-agent:toolkit-step1',
+                 str(ROOT / 'data/external/extracted'),
                  '--hash-corpus', str(ROOT / 'data/locked/private/hash-corpus.json'), '--hours', str(4/60), '--test-model')
     assert launch.returncode == 0, launch.stderr
     run = tmp_path / 'runs' / launch.stdout.strip().splitlines()[-1]

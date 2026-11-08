@@ -51,15 +51,21 @@ training prior and threshold 0.5. k=0 uses no target tuning and threshold
   thresholds rerun the full procedure within each fold.
 * **D:** Opus 5.5 reads each pool image once, zero-shot, using the fixed
   `config/arm-d-prompt.md`, low thinking and strict JSON p_monteggia 0–100;
-  up to three attempts then failure/exclusion, cached privately. D-head uses
+  three parse/validation failures then exclusion, cached privately. Infrastructure
+  failures (including non-zero exits, timeouts, rate/usage limits) retry with
+  exponential backoff for up to one hour per image and remain uncached on
+  exhaustion; the command exits nonzero and a rerun retries them. D-head uses
   A-style logistic regression on soft labels represented by weighted binary
   pairs; actual labels replace pseudo-labels at weight 5. The scaler fits
   unique images unweighted. Grouped CV excludes all held-out patient images
   from each fit; C=1 at k=0 or when fewer than two patients per class.
   D-ft uses B-lora on hard p≥50 labels with true labels substituted. Both
   require complete cache coverage; processed failures are excluded. The
-  test-only `--allow-partial` uses separate output paths. A failed cached
-  annotation is not automatically retried on restart; a torn final JSONL
+  test-only `--allow-partial` uses separate output paths. Cached validation
+  exclusions are not automatically retried. Recognizable legacy subprocess
+  errors are removed from the cache under lock and retried; old exclusions
+  recorded only as ValueError cannot be distinguished retrospectively from
+  genuine malformed replies and require operator review. A torn final JSONL
   line requires repair. Earlier five validation entries lack verbatim response
   text, but retain parsed integer values.
 * **E:** one SAE per encoder on pool patch tokens at 2/3 depth, dictionary
@@ -74,12 +80,18 @@ training prior and threshold 0.5. k=0 uses no target tuning and threshold
   makes selected OOF AUROC optimistic; tiny allocations can be unstable.
 * **H:** reuse `features/external-manifests/`: GRAZ `fracture_visible`
   (6,777 negative / 13,550 positive), FracAtlas `fractured` (3,364 /
-  719), MURA labeled train+valid studies (23,606 / 16,403; positive is
+  719), MURA labeled train+valid studies (23,602 / 16,403; positive is
   abnormal, not necessarily fracture). Uniformly sample 40,000 images
   without replacement from the union, seed 7; inverse-frequency loss
   weights balance classes, rather than balanced sampling. One epoch of
   B-lora recipe retains the partial final batch. External image loading
-  permits truncated JPEGs. Save private LoRA+head checkpoint; k=0 uses it
+  permits truncated JPEGs. Manifests fully decode images and exclude AppleDouble
+  sidecars and undecodable files: regeneration removed four negative MURA
+  sidecars (40,009 → 40,005); no other undecodable files were found.
+  Pretraining logs decoding failures, skips them, and fails above 0.5% of
+  the sampled images. Class weights use sampled labels before any skips;
+  failures and the trained count are recorded in the private checkpoint receipt.
+  Manifest hash changes invalidate cached pretraining. Save private LoRA+head checkpoint; k=0 uses it
   directly, k>0 continues both adapter and transferred head with a new
   optimizer and the B-lora schedule. Smaller samples are validation only
   and use separate paths.
