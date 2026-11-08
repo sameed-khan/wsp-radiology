@@ -132,3 +132,7 @@ the plan's required network controls, red team, label isolation or audit.
   interruptions and handled identically for F and G.
 - Work proceeds up to launch readiness; F/G launch requires the
   investigator's explicit go-ahead.
+- Amendment (same day): OpenAI models became available again; per the
+  investigator, implementation resumes on OpenAI models (GPT-6.1-Terra),
+  Opus 5.5 remains the F/G agent model, and all non-F/G arms are completed
+  before F/G launch.
