@@ -21,9 +21,10 @@ test = ["pytest>=8.3,<9"]
 [project.scripts]
 wsp-ml = "wsp_ml.cli:main"
 wsp-prep = "wsp_prep.cli:main"
+wsp-arms = "wsp_arms.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/wsp_prep", "src/wsp_ml"]
+packages = ["src/wsp_prep", "src/wsp_ml", "src/wsp_arms"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
