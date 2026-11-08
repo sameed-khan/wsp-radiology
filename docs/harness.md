@@ -59,6 +59,7 @@ watcher/watchdog outages between checks are possible.
 
 ## Orchestrator commands
 (`wsp-harness [--root R] ...`; `--root` defaults to the repo.)
+- `prepare-launch --k 10|50 --resample 1 [--image TAG] [--proxy-image TAG]` creates a fresh private `.runtime/run-inputs/` receipt and a separate labels-only directory in the main checkout. It prints both preview prompts and their unified diff, then a JSON checklist; exit 1 means at least one check failed. GPU free memory requires 22 GiB for two 11 GiB caps. Receipt includes image IDs and available repository digests, not a claim that mutable tags are pinned. The prompt preview uses a shared current timestamp; actual launch times and prompt hashes differ. Use the printed labels path for both arms, recheck its hash and all dynamic checks at launch. Readiness is not approval: orchestrator must verify red-team, prerequisite baselines, freeze/tag and investigator authorization. The receipt and labels contain private material; retain securely or delete when no longer needed.
 - `launch --arm F|G --k K --labels DIR --pool DIR [--hours 24] [--backend simple|infra] [--test-model]`
   detaches the supervisor (setsid or `--daemonizer systemd`) and prints the run id.
   Infra backend also needs `--models-dir --external-dir --image --hash-corpus`.

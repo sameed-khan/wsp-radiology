@@ -529,6 +529,13 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog='wsp-harness')
     p.add_argument('--root', help='project root containing .pi/ and runs/ (default: the harness repo)')
     sub = p.add_subparsers(dest='cmd', required=True)
+    from .prepare import cmd_prepare
+    s = sub.add_parser('prepare-launch', help='prepare private labels and check F/G launch readiness (no launch)')
+    s.add_argument('--k', type=int, required=True)
+    s.add_argument('--resample', type=int, required=True)
+    s.add_argument('--image', default='wsp-agent:toolkit-step1')
+    s.add_argument('--proxy-image', default='wsp-proxy:step3')
+    s.set_defaults(func=cmd_prepare)
     s = sub.add_parser('launch', help='create a run and start a detached supervisor')
     s.add_argument('--arm', required=True, choices=['F', 'G', 'f', 'g'])
     s.add_argument('--k', type=int, required=True)
