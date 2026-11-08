@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wsp-toolkit"
+version = "0.1.0"
+description = "Standalone agent toolkit: encoder adapters, features, probes, SAE, fine-tuning, provenance"
+requires-python = ">=3.11"
+# Versions are intentionally loose so installing into the agent image never replaces its torch/transformers.
+dependencies = ["torch>=2.4", "transformers>=4.57", "numpy", "Pillow", "safetensors", "peft>=0.17"]
+
+[tool.setuptools]
+packages = ["wsp_toolkit"]

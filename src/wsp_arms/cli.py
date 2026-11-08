@@ -1,0 +1,228 @@
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import time
+
+
+def _set_threads(n):
+    for v in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS'):
+        os.environ[v] = str(n)
+
+
+def _one(args):
+    arm, enc, k, r, force = args
+    t = time.monotonic()
+    try:
+        if arm == 'E':
+            from . import arms_e as mod
+        else:
+            from . import arms_ac as mod
+        rec = mod.run(arm, enc, k, r, force=force)
+        return (arm, enc, k, r, 'ok', time.monotonic() - t, rec.get('threshold'))
+    except Exception as e:  # reported, not swallowed silently
+        return (arm, enc, k, r, f'FAILED: {type(e).__name__}: {e}', time.monotonic() - t, None)
+
+
+def _grid_b(args):
+    """Sequential (one GPU job at a time), resumable: completed runs (run.json status complete) are skipped."""
+    from . import arm_b, core
+    variants = [args.arm.split('-', 1)[1]] if '-' in args.arm else (args.variants or list(arm_b.VARIANTS))
+    encs = args.encoders or list(core.ENCODERS)
+    ks = [core.parse_k(k) for k in (args.ks or core.KS)]
+    rs = args.rs or list(core.RS)
+    paths = core.Paths.default()
+    tasks = [(f'B-{v}', e, k, r) for v in variants for e in encs for k in ks for r in rs]
+    start = time.monotonic()
+    n_ok = n_skip = 0
+    failed = []
+    for arm, e, k, r in tasks:
+        t = time.monotonic()
+        if not args.force and core.is_complete(paths.run_dir(arm, e, k, r)):
+            n_skip += 1
+            continue
+        try:
+            arm_b.run(arm, e, k, r, paths=paths, force=args.force, steps=args.steps, micro_batch=args.micro_batch)
+            n_ok += 1
+            print(f'{arm} {e} k={k} r={r} ok {time.monotonic() - t:.1f}s', flush=True)
+        except Exception as ex:
+            failed.append((arm, e, k, r, f'{type(ex).__name__}: {ex}'))
+            print(f'{arm} {e} k={k} r={r} FAILED {type(ex).__name__}: {ex}', file=sys.stderr, flush=True)
+            try:
+                import torch
+                torch.cuda.empty_cache()
+            except Exception:
+                pass
+    print(json.dumps({'arm': args.arm, 'runs': len(tasks), 'ok': n_ok, 'skipped_complete': n_skip, 'failed': len(failed),
+                      'wall_seconds': round(time.monotonic() - start, 1)}))
+    return 1 if failed else 0
+
+
+def _one_d(task):
+    from . import arm_d
+    arm, enc, k, r, force, partial, steps, micro_batch = task
+    try:
+        arm_d.run(arm, enc, k, r, force=force, allow_partial=partial, steps=steps, micro_batch=micro_batch)
+        return None
+    except Exception as exc:
+        return f'{arm} {enc} k={k} r={r}: {type(exc).__name__}: {exc}'
+
+
+def _grid_d(args):
+    from . import arm_d, core
+    try:
+        _, coverage = arm_d.load_cache(core.Paths.default(), args.allow_partial)
+        print(json.dumps({'cache_coverage': coverage}), flush=True)
+    except Exception as exc:
+        print(f'D cache: {type(exc).__name__}: {exc}', file=sys.stderr)
+        return 1
+    rs = args.rs or ([1] if args.arm == 'D-ft' else core.RS)
+    if args.arm == 'D-ft' and any(r != 1 for r in rs):
+        print('D-ft is restricted to r=1', file=sys.stderr)
+        return 1
+    tasks = [(args.arm, e, str(k), r, args.force, args.allow_partial, args.steps, args.micro_batch)
+             for e in (args.encoders or core.ENCODERS) for k in (args.ks or ('0', *core.KS)) for r in rs]
+    _set_threads(1)
+    if args.arm == 'D-head' and args.jobs > 1:
+        import multiprocessing as mp
+        with mp.get_context('spawn').Pool(min(args.jobs, 8)) as pool:
+            results = list(pool.imap_unordered(_one_d, tasks))
+    else:
+        results = [_one_d(t) for t in tasks]
+    failures = [x for x in results if x]
+    for error in failures:
+        print(error, file=sys.stderr)
+    print(json.dumps({'arm': args.arm, 'runs': len(tasks), 'failed': len(failures)}))
+    return int(bool(failures))
+
+
+def _grid_h(args):
+    from . import arm_h, core
+    paths = core.Paths.default()
+    tasks = [(e, str(k), r) for e in (args.encoders or core.ENCODERS)
+             for k in (args.ks or ('0', *core.KS)) for r in (args.rs or core.RS)]
+    failed = skipped = 0
+    for enc, k, r in tasks:
+        out = paths.run_dir('H', enc, k, r) if args.sample_size == 40000 else paths.run_dir('H-validation', enc, k, r)
+        if not args.force and core.is_complete(out):
+            existing = json.loads((out / 'run.json').read_text())
+            if existing.get('transfer_sample_size') == args.sample_size:
+                skipped += 1
+                continue
+        try:
+            arm_h.run(enc, k, r, paths=paths, force=args.force, sample_size=args.sample_size,
+                      steps=args.steps, micro_batch=args.micro_batch)
+            print(f'H {enc} k={k} r={r} ok', flush=True)
+        except Exception as exc:
+            failed += 1
+            print(f'H {enc} k={k} r={r} FAILED {type(exc).__name__}: {exc}', file=sys.stderr, flush=True)
+    print(json.dumps({'arm': 'H', 'runs': len(tasks), 'skipped_complete': skipped, 'failed': failed}))
+    return int(failed > 0)
+
+
+def _time_b(args):
+    from . import arm_b, core
+    paths = core.Paths.default()
+    res = []
+    for e in (args.encoders or list(core.ENCODERS)):
+        for v in args.variants:
+            t = arm_b.time_one(e, v, paths=paths, steps=args.steps, micro_batch=args.micro_batch)
+            print(json.dumps(t), flush=True)
+            res.append(t)
+    est = arm_b.estimate_grid(res, paths=paths)
+    print(json.dumps(est, indent=1))
+    out = args.out or str(paths.private / 'runs/baselines/B-timing.json')
+    core.write_private_atomic(out, json.dumps({'timings': res, 'estimate': est}, indent=1))
+    return 0
+
+
+def main(argv=None):
+    os.umask(0o077)
+    os.environ.setdefault('PYTORCH_ALLOC_CONF', 'expandable_segments:True')
+    p = argparse.ArgumentParser(prog='wsp-arms')
+    sub = p.add_subparsers(dest='cmd', required=True)
+    g = sub.add_parser('grid', help='run (resumable) all encoders x k x r for an arm')
+    g.add_argument('--arm', required=True, choices=('A', 'C', 'E', 'B', 'B-full', 'B-lora', 'H', 'D-head', 'D-ft'))
+    g.add_argument('--variants', nargs='*', default=None, choices=('full', 'lora'), help='arm B variants (default both)')
+    g.add_argument('--steps', type=int, default=None, help='arm B: override step count (testing only; recorded)')
+    g.add_argument('--micro-batch', type=int, default=None, help='micro-batch (grad accumulation to 16)')
+    g.add_argument('--sample-size', type=int, default=40000, help='H validation checkpoint size (default 40000)')
+    g.add_argument('--encoders', nargs='*', default=None)
+    g.add_argument('--ks', nargs='*', default=None)
+    g.add_argument('--rs', nargs='*', type=int, default=None)
+    g.add_argument('--jobs', type=int, default=8)
+    g.add_argument('--force', action='store_true')
+    g.add_argument('--allow-partial', action='store_true', help='D: test-only partial cache; writes separate partial paths')
+    sp = sub.add_parser('sae', help='arm E: train the per-encoder top-k SAE on pool patch tokens (GPU, once per encoder)')
+    sp.add_argument('--encoders', nargs='*', default=None)
+    sp.add_argument('--steps', type=int, default=None)
+    sp.add_argument('--force', action='store_true')
+    tb = sub.add_parser('time-b', help='arm B: 50-step timing run per encoder/variant + full-grid GPU-hour estimate')
+    tb.add_argument('--encoders', nargs='*', default=None)
+    tb.add_argument('--variants', nargs='*', default=['full', 'lora'])
+    tb.add_argument('--steps', type=int, default=50)
+    tb.add_argument('--micro-batch', type=int, default=None)
+    tb.add_argument('--out', default=None)
+    hp = sub.add_parser('pretrain-h', help='arm H: pretrain transfer checkpoint on external manifests')
+    hp.add_argument('--encoder', required=True, choices=('skelex', 'medsiglip', 'dinov3'))
+    hp.add_argument('--sample-size', type=int, default=40000, help='smaller sample for validation only')
+    hp.add_argument('--micro-batch', type=int, default=None)
+    hp.add_argument('--force', action='store_true')
+    dl = sub.add_parser('label-d', help='arm D: annotate pool images with Opus; resumable private cache')
+    dl.add_argument('--limit', type=int, default=None, help='only first N pool images (validation)')
+    dl.add_argument('--workers', type=int, default=6)
+    dl.add_argument('--retries', type=int, default=3)
+    dl.add_argument('--timeout', type=int, default=180)
+    args = p.parse_args(argv)
+    if args.cmd == 'pretrain-h':
+        from . import arm_h
+        print(json.dumps(arm_h.pretrain(args.encoder, sample_size=args.sample_size, force=args.force, micro_batch=args.micro_batch)))
+        return 0
+    if args.cmd == 'grid' and args.arm in ('D-head', 'D-ft'):
+        return _grid_d(args)
+    if args.cmd == 'grid' and args.arm == 'H':
+        return _grid_h(args)
+    if args.cmd == 'label-d':
+        from . import arm_d_labels
+        result = arm_d_labels.run(limit=args.limit, workers=args.workers, retries=args.retries, timeout=args.timeout)
+        print(json.dumps(result))
+        return 1 if result['failed'] else 0
+    if args.cmd == 'time-b':
+        return _time_b(args)
+    if args.cmd == 'grid' and args.arm.startswith('B'):
+        return _grid_b(args)
+    if args.cmd == 'sae':
+        from . import core, sae_train
+        for e in (args.encoders or list(core.ENCODERS)):
+            sae_train.train_one(e, steps=args.steps, force=args.force)
+        return 0
+    jobs = max(1, min(args.jobs, 8))
+    _set_threads(1)
+    from . import core
+    encs = args.encoders or list(core.ENCODERS)
+    ks = [core.parse_k(k) for k in (args.ks or core.KS)]
+    rs = args.rs or list(core.RS)
+    tasks = [(args.arm, e, k, r, args.force) for e in encs for k in ks for r in rs]
+    start = time.monotonic()
+    results = []
+    if jobs == 1:
+        results = [_one(t) for t in tasks]
+    else:
+        import multiprocessing as mp
+        with mp.get_context('spawn').Pool(jobs) as pool:
+            for res in pool.imap_unordered(_one, tasks):
+                results.append(res)
+                print(f'{res[0]} {res[1]} k={res[2]} r={res[3]} {res[4]} {res[5]:.1f}s', flush=True)
+    failed = [r for r in results if r[4] != 'ok']
+    summary = {'arm': args.arm, 'runs': len(tasks), 'ok': len(tasks) - len(failed), 'failed': len(failed),
+               'wall_seconds': round(time.monotonic() - start, 1), 'sum_run_seconds': round(sum(r[5] for r in results), 1)}
+    print(json.dumps(summary))
+    for f in failed:
+        print(f, file=sys.stderr)
+    return 1 if failed else 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

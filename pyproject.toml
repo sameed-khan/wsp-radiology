@@ -25,9 +25,10 @@ wsp-ml = "wsp_ml.cli:main"
 wsp-prep = "wsp_prep.cli:main"
 wsp-eval = "wsp_eval.cli:main"
 wsp-harness = "wsp_harness.cli:main"
+wsp-arms = "wsp_arms.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["infra", "src/wsp_eval", "src/wsp_harness", "src/wsp_ml", "src/wsp_prep"]
+packages = ["infra", "src/wsp_arms", "src/wsp_eval", "src/wsp_harness", "src/wsp_ml", "src/wsp_prep"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
