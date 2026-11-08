@@ -24,8 +24,8 @@ from test_watcher import POOL_IM, POOL_JPG, TEST_IM, TEST_JPG, make_image
 from test_watcher import NAMES as WNAMES, enc as wenc, ph as wph, sha as wsha
 
 pytestmark = pytest.mark.docker
-AGENT_IMAGE = "wsp-agent-base:step1"
-PROXY_IMAGE = "wsp-proxy:step3"
+AGENT_IMAGE = "wsp-agent:phase1"
+PROXY_IMAGE = "wsp-proxy:phase1"
 CAP_GIB = 0.05
 CANARY = "E2E-CANARY-DO-NOT-LEAK"
 

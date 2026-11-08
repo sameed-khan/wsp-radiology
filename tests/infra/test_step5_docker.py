@@ -17,7 +17,7 @@ from infra import watcher as W
 from tests.infra.test_watcher import NAMES, POOL_IM, POOL_JPG, TEST_IM, TEST_JPG, enc, make_image, ph, sha
 
 pytestmark = pytest.mark.docker
-AGENT_IMAGE = "wsp-agent-base:step1"
+AGENT_IMAGE = "wsp-agent:phase1"
 CAP_GIB = 0.05  # 51 MiB: any CUDA context exceeds it
 
 

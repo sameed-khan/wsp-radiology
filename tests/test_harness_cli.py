@@ -149,6 +149,16 @@ def test_message_delivery_to_fake_driver(tmp_path):
     assert [json.loads(l)['event'] for l in (run / 'interventions.jsonl').read_text().splitlines()] == ['message-delivered'] * 2
 
 
+def test_phase1_image_defaults():
+    parser = cli.build_parser()
+    prepare = parser.parse_args(['prepare-launch', '--k', '10', '--resample', '1'])
+    launch = parser.parse_args(['launch', '--arm', 'F', '--k', '10', '--labels', '/l', '--pool', '/p'])
+    assert (prepare.image, prepare.proxy_image, launch.image) == (
+        'wsp-agent:phase1', 'wsp-proxy:phase1', 'wsp-agent:phase1')
+    from infra.sandbox import DEFAULT_PROXY_IMAGE
+    assert DEFAULT_PROXY_IMAGE == prepare.proxy_image
+
+
 def test_infra_helper_argv(tmp_path):
     from wsp_harness import sandbox_infra
     (tmp_path / 'state').mkdir()

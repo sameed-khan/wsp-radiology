@@ -533,8 +533,8 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser('prepare-launch', help='prepare private labels and check F/G launch readiness (no launch)')
     s.add_argument('--k', type=int, required=True)
     s.add_argument('--resample', type=int, required=True)
-    s.add_argument('--image', default='wsp-agent:toolkit-step1')
-    s.add_argument('--proxy-image', default='wsp-proxy:step3')
+    s.add_argument('--image', default='wsp-agent:phase1')
+    s.add_argument('--proxy-image', default='wsp-proxy:phase1')
     s.set_defaults(func=cmd_prepare)
     s = sub.add_parser('launch', help='create a run and start a detached supervisor')
     s.add_argument('--arm', required=True, choices=['F', 'G', 'R', 'f', 'g', 'r'])
@@ -548,8 +548,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument('--continue-after', type=float, default=300.0)
     s.add_argument('--snapshot-interval', type=float, default=3600.0)
     s.add_argument('--status-interval', type=float, default=30.0)
-    for n in ('models-dir', 'external-dir', 'image', 'hash-corpus'):
+    for n in ('models-dir', 'external-dir', 'hash-corpus'):
         s.add_argument('--' + n, help='infra backend only')
+    s.add_argument('--image', default='wsp-agent:phase1', help='infra backend only')
     s.add_argument('--gpu-mem-cap-gib', type=float, default=11.0)
     s.set_defaults(func=cmd_launch)
     s = sub.add_parser('status'); s.add_argument('--run'); s.set_defaults(func=cmd_status)
