@@ -6,10 +6,9 @@ Scans new/changed regular files in the workspace (incremental: mtime/size/inode 
 Classification per image (including images carved from blobs and found inside bounded
 archives, reusing the proxy's scanner and limits):
 
-  stop   raw/archive/normalized SHA-256 of an MFXR image that is not explained as a pool
-         image; pHash Hamming <= 2 to a *test-split* image; text/binary file with >= 3
-         distinct original MFXR basenames.
-  alert  pHash Hamming 3..6 to a test-split image; unscannable/over-limit content.
+  stop   raw/archive/normalized SHA-256 of an MFXR image or archive; text/binary
+         file with >= 3 distinct original MFXR basenames. Optionally stop on near test pHash.
+  alert  pHash Hamming 0..6 to a test-split image by default; unscannable/over-limit content.
   info   `pool-derivative`: matches only pool images (the pool is mounted on purpose).
 
 A stop finding writes D/STOP_REQUEST.json {reason, file, rule, time}. Everything is also
@@ -35,7 +34,6 @@ import numpy as np
 
 from infra.proxy import wsp_content as wc
 
-STOP_DIST = 2
 ALERT_DIST = 6
 POOL_DIST = 6
 STOP_FILE = "STOP_REQUEST.json"
@@ -119,7 +117,7 @@ def _min_dist(values: np.ndarray, value: int) -> int:
     return int(np.bitwise_count(values ^ np.uint64(value)).min())
 
 
-def classify(obs: _Obs) -> tuple[str, str] | None:
+def classify(obs: _Obs, phash_stop_distance: int | None = None) -> tuple[str, str] | None:
     """Return (level, rule) for the most severe finding, or None when clean."""
     if obs.archive_hit:
         return "stop", "sha256-archive"
@@ -133,23 +131,16 @@ def classify(obs: _Obs) -> tuple[str, str] | None:
 
     for d in obs.data:
         ph = d["phash"]
-        if ph is not None:
+        if d["exact"]:
+            note("stop", "sha256")
+        elif ph is not None:
             dt, dp = ph
-            if dt <= STOP_DIST:
+            if phash_stop_distance is not None and dt <= phash_stop_distance:
                 note("stop", "phash-test")
-                continue
-            if d["exact"]:
-                # Exact MFXR bytes/pixels: only acceptable when the image is a pool image.
-                if dp <= STOP_DIST:
-                    note("info", "pool-derivative")
-                else:
-                    note("stop", "sha256")
             elif dt <= ALERT_DIST:
                 note("alert", "phash-test-near")
             elif dp <= POOL_DIST:
                 note("info", "pool-derivative")
-        elif d["exact"]:
-            note("stop", "sha256")  # exact match on non-image bytes (e.g. an archive/blob of MFXR)
     return worst
 
 
@@ -162,8 +153,11 @@ class Watcher:
     run_id: str | None = None
     limits: wc.Limits = field(default_factory=wc.Limits)
     max_file: int = DEFAULT_MAX_FILE
+    phash_stop_distance: int | None = None
 
     def __post_init__(self):
+        if self.phash_stop_distance is not None and not 0 <= self.phash_stop_distance <= ALERT_DIST:
+            raise ValueError("phash_stop_distance must be between 0 and 6")
         self.workspace = Path(self.workspace)
         self.state_dir = Path(self.state_dir)
         self.control_dir = Path(self.control_dir)
@@ -216,13 +210,13 @@ class Watcher:
         except wc.Blocked as e:
             if e.rule == "basenames":
                 return "stop", "basenames"
-            result = classify(obs)
+            result = classify(obs, self.phash_stop_distance)
             if result and result[0] == "stop":
                 return result
             return "alert", "unscannable-" + e.rule
         except Exception:
             return "alert", "unscannable-error"
-        return classify(obs)
+        return classify(obs, self.phash_stop_distance)
 
     def scan_once(self) -> list[dict]:
         """One incremental pass; returns the new findings (dicts without file contents)."""
@@ -277,6 +271,8 @@ def main(argv=None) -> int:
     ap.add_argument("--control-dir", type=Path, required=True)
     ap.add_argument("--interval", type=float, default=120)
     ap.add_argument("--run-id")
+    ap.add_argument("--phash-stop-distance", type=int, choices=range(ALERT_DIST + 1), default=None,
+                    help="opt in to stopping for test pHash distance <= N (0..6); default alert only")
     ap.add_argument("--once", action="store_true", help="scan once, exit 3 if a stop finding was made")
     a = ap.parse_args(argv)
     if not a.workspace.is_dir():
@@ -286,7 +282,8 @@ def main(argv=None) -> int:
     except Exception as exc:
         print(f"cannot load corpus: {type(exc).__name__}", file=sys.stderr)
         return 2
-    w = Watcher(a.workspace, corpus, a.state_dir, a.control_dir, a.run_id)
+    w = Watcher(a.workspace, corpus, a.state_dir, a.control_dir, a.run_id,
+                phash_stop_distance=a.phash_stop_distance)
     if a.once:
         w.scan_once()
         return 3 if w.stops else 0

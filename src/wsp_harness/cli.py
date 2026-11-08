@@ -80,7 +80,8 @@ def cmd_launch(args) -> int:
         missing = [n for n in ('models_dir', 'external_dir', 'image', 'hash_corpus') if not getattr(args, n)]
         if missing:
             raise SystemExit('error: --backend infra needs ' + ', '.join('--' + m.replace('_', '-') for m in missing))
-    run = create_run(root, args.arm, args.k, Path(args.labels), Path(args.pool), args.hours, test_model=args.test_model)
+    run = create_run(root, args.arm, args.k, Path(args.labels), Path(args.pool), args.hours,
+                     test_model=args.test_model, image=args.image if args.backend == 'infra' else 'ubuntu:24.04')
     if args.backend == 'infra':
         (run / 'state/backend.json').write_text(json.dumps({
             'models_dir': str(Path(args.models_dir).resolve()), 'external_dir': str(Path(args.external_dir).resolve()),
@@ -528,6 +529,13 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog='wsp-harness')
     p.add_argument('--root', help='project root containing .pi/ and runs/ (default: the harness repo)')
     sub = p.add_subparsers(dest='cmd', required=True)
+    from .prepare import cmd_prepare
+    s = sub.add_parser('prepare-launch', help='prepare private labels and check F/G launch readiness (no launch)')
+    s.add_argument('--k', type=int, required=True)
+    s.add_argument('--resample', type=int, required=True)
+    s.add_argument('--image', default='wsp-agent:toolkit-step1')
+    s.add_argument('--proxy-image', default='wsp-proxy:step3')
+    s.set_defaults(func=cmd_prepare)
     s = sub.add_parser('launch', help='create a run and start a detached supervisor')
     s.add_argument('--arm', required=True, choices=['F', 'G', 'f', 'g'])
     s.add_argument('--k', type=int, required=True)

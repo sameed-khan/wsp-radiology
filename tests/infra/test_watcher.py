@@ -84,21 +84,21 @@ def test_clean_workspace_has_no_findings(watch):
 def test_exact_test_image_stops_and_writes_stop_request(watch):
     put(watch, "sub/x.jpg", TEST_JPG)
     f = watch.scan_once()
-    assert levels(f) == {"sub/x.jpg": ("stop", "phash-test")}
+    assert levels(f) == {"sub/x.jpg": ("stop", "sha256")}
     req = json.loads((watch.control_dir / W.STOP_FILE).read_text())
     assert set(req) == {"reason", "file", "rule", "time"}
-    assert req["file"] == "sub/x.jpg" and req["rule"] == "phash-test"
+    assert req["file"] == "sub/x.jpg" and req["rule"] == "sha256"
     assert (watch.control_dir / W.STOP_FILE).stat().st_mode & 0o077 == 0
 
 
-def test_reencoded_and_resized_test_image_stops(watch):
+def test_reencoded_and_resized_test_image_alerts(watch):
     put(watch, "a.png", enc(TEST_IM, "PNG"))
     put(watch, "b.jpg", enc(TEST_IM.resize((128, 96)), quality=40))
-    assert {v[0] for v in levels(watch.scan_once()).values()} == {"stop"}
+    assert {v[0] for v in levels(watch.scan_once()).values()} == {"alert"}
+    assert not (watch.control_dir / W.STOP_FILE).exists()
 
 
 def test_pool_image_is_derivative_not_stop(watch):
-    put(watch, "pool_copy.jpg", POOL_JPG)
     put(watch, "pool_resized.jpg", enc(POOL_IM.resize((200, 150)), quality=60))
     put(watch, "pool_png.png", enc(POOL_IM, "PNG"))
     f = levels(watch.scan_once())
@@ -106,7 +106,7 @@ def test_pool_image_is_derivative_not_stop(watch):
     assert not (watch.control_dir / W.STOP_FILE).exists()
 
 
-@pytest.mark.parametrize("bits,expected", [(0, ("stop", "phash-test")), (2, ("stop", "phash-test")),
+@pytest.mark.parametrize("bits,expected", [(0, ("alert", "phash-test-near")), (2, ("alert", "phash-test-near")),
                                            (3, ("alert", "phash-test-near")), (6, ("alert", "phash-test-near")),
                                            (7, None), (20, None)])
 def test_phash_distance_bands(tmp_path, corpus_dict, bits, expected):
@@ -118,6 +118,28 @@ def test_phash_distance_bands(tmp_path, corpus_dict, bits, expected):
     f = levels(w.scan_once())
     assert f.get("i.png") == expected
     assert (w.control_dir / W.STOP_FILE).exists() == (expected is not None and expected[0] == "stop")
+
+
+def test_optional_phash_stop_and_exact_pool_stop(tmp_path, corpus_dict):
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    w = W.Watcher(ws, wc.Corpus(corpus_dict), tmp_path / "st", tmp_path / "ctl", phash_stop_distance=2)
+    put(w, "near.png", enc(TEST_IM, "PNG"))
+    assert levels(w.scan_once()) == {"near.png": ("stop", "phash-test")}
+    assert (w.control_dir / W.STOP_FILE).exists()
+    put(w, "pool.jpg", POOL_JPG)
+    assert levels(w.scan_once()) == {"pool.jpg": ("stop", "sha256")}
+
+
+def test_normalized_hash_stops_even_if_phash_is_pool_only(tmp_path, corpus_dict):
+    png = enc(POOL_IM, "PNG")
+    d = dict(corpus_dict, raw_sha256=[], normalized_sha256=[sha(png)],
+             phash={"pool": [ph(POOL_IM)], "test": []})
+    (tmp_path / "ws").mkdir()
+    w = W.Watcher(tmp_path / "ws", wc.Corpus(d), tmp_path / "st", tmp_path / "ctl")
+    put(w, "pool.png", png)
+    assert levels(w.scan_once()) == {"pool.png": ("stop", "sha256")}
+    assert (w.control_dir / W.STOP_FILE).exists()
 
 
 def test_pool_beyond_band_is_clean_and_ambiguous_prefers_test(tmp_path, corpus_dict):
@@ -148,7 +170,7 @@ def test_archive_and_nested_detection(watch):
     put(watch, "pool.zip", z2.getvalue())
     f = levels(watch.scan_once())
     assert f["data.zip"][0] == "stop"
-    assert f["pool.zip"] == ("info", "pool-derivative")
+    assert f["pool.zip"] == ("stop", "sha256")
 
 
 def test_carved_and_archive_hash(watch):
@@ -159,7 +181,7 @@ def test_carved_and_archive_hash(watch):
     watch.corpus.archive.add(sha(b"archive-bytes"))
     f = levels(watch.scan_once())
     assert f["blob.parquet"][0] == "stop"
-    assert f["pool.blob"] == ("info", "pool-derivative")
+    assert f["pool.blob"] == ("stop", "sha256")
     assert f["arc.bin"] == ("stop", "sha256-archive")
 
 
@@ -190,7 +212,7 @@ def test_incremental_cache_and_rescan_on_change(watch, monkeypatch):
     assert watch.scan_once() == [] and calls == []  # unchanged: not re-read
     time.sleep(0.01)
     p.write_bytes(TEST_JPG)
-    assert levels(watch.scan_once()) == {"a.jpg": ("stop", "phash-test")} and len(calls) == 1
+    assert levels(watch.scan_once()) == {"a.jpg": ("stop", "sha256")} and len(calls) == 1
     assert watch.scan_once() == [] and len(calls) == 1  # finding is not re-reported
     p.unlink()
     watch.scan_once()

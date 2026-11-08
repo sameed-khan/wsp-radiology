@@ -7,6 +7,7 @@ import math
 import os
 from pathlib import Path
 import queue
+import shutil
 import subprocess
 import threading
 import time
@@ -29,7 +30,7 @@ def utc(dt: datetime) -> str:
 
 
 def create_run(root: Path, arm: str, k: int, labels_dir: Path, pool_dir: Path,
-               hours: float, test_model: bool = False) -> Path:
+               hours: float, test_model: bool = False, image: str = IMAGE) -> Path:
     root, labels_dir, pool_dir = map(lambda p: Path(p).resolve(), (root, labels_dir, pool_dir))
     if not math.isfinite(hours) or hours <= 0:
         raise ValueError('hours must be positive and finite')
@@ -37,11 +38,11 @@ def create_run(root: Path, arm: str, k: int, labels_dir: Path, pool_dir: Path,
         raise ValueError('pool and labels must be directories')
     labels_hash = sha256(labels_dir / 'labels.csv')
     inputs = load_inputs(root, arm, allow_test_model=test_model)
-    image_id = subprocess.check_output(['docker', 'image', 'inspect', IMAGE, '--format', '{{.Id}}'], text=True).strip()
+    image_id = subprocess.check_output(['docker', 'image', 'inspect', image, '--format', '{{.Id}}'], text=True).strip()
     revision = subprocess.check_output(['git', '-C', str(REPO), 'rev-parse', 'HEAD'], text=True).strip()
     now = datetime.now(timezone.utc)
     deadline = now + timedelta(hours=hours)
-    run_id = now.strftime('%Y%m%dT%H%M%S') + '-' + uuid.uuid4().hex[:12]
+    run_id = now.strftime('%Y%m%dt%H%M%S') + '-' + uuid.uuid4().hex[:12]
     run = root / 'runs' / run_id
     run.mkdir(parents=True, mode=0o700)
     for name in ('recorder/sessions', 'recorder/subagents', 'workspace/output', 'workspace/home', 'snapshots', 'state', 'control'):
@@ -52,7 +53,7 @@ def create_run(root: Path, arm: str, k: int, labels_dir: Path, pool_dir: Path,
         (run / name).chmod(0o777)
     values = {'arm': arm.upper(), 'k': k, 'start_utc': utc(now), 'deadline_utc': utc(deadline),
               'now_utc': utc(now), 'remaining': str(timedelta(hours=hours)),
-              'weight_sentence': inputs.weight_sentence, 'n_pool': len(list(pool_dir.iterdir()))}
+              'weight_sentence': inputs.weight_sentence, 'n_pool': sum(p.is_file() for p in pool_dir.iterdir())}
     prompt = render(inputs.launch_template, values)
     extensions = {p.name: sha256(p) for p in sorted((REPO / 'harness/pi-ext').iterdir()) if p.is_file()}
     launch = {'run_id': run_id, 'arm': arm.upper(), 'k': k, 'git_revision': revision,
@@ -61,10 +62,25 @@ def create_run(root: Path, arm: str, k: int, labels_dir: Path, pool_dir: Path,
               'labels_sha256': labels_hash, 'labels_dir': str(labels_dir), 'pool_dir': str(pool_dir),
               'start_utc': utc(now), 'deadline_utc': utc(deadline), 'deadline_epoch': deadline.timestamp(),
               'launch_prompt': prompt, 'launch_prompt_sha256': digest(prompt.encode()),
-              'n_pool': values['n_pool'], 'image': IMAGE, 'image_id': image_id, 'test_model': test_model}
+              'n_pool': values['n_pool'], 'image': image, 'image_id': image_id, 'test_model': test_model}
     (run / 'launch.json').write_text(json.dumps(launch, indent=2) + '\n')
     (run / 'interventions.jsonl').touch(mode=0o600)
     (run / 'workspace/TASK.md').write_text(prompt)
+    # Ubuntu's image provides python3 only; expose the conventional command in
+    # its existing user-local PATH without modifying the read-only image.
+    local_bin = run / 'workspace/home/.local/bin'
+    local_bin.mkdir(parents=True, exist_ok=True)
+    (local_bin / 'python').symlink_to('/usr/bin/python3')
+    toolkit = root / 'toolkit/TOOLKIT.md'
+    if not toolkit.is_file():
+        toolkit = Path('/home/skhanxx8/projects/wsp-radiology/toolkit/TOOLKIT.md')
+    if toolkit.is_file():
+        shutil.copyfile(toolkit, run / 'workspace/TOOLKIT.md')
+    else:
+        result = subprocess.run(['docker', 'run', '--rm', '--name', f'wsp-seed-{run_id}', '--network', 'none', '--entrypoint', 'cat',
+                                 image, '/opt/wsp-toolkit/TOOLKIT.md'], capture_output=True)
+        if result.returncode == 0:
+            (run / 'workspace/TOOLKIT.md').write_bytes(result.stdout)
     return run
 
 
