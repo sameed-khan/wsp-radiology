@@ -25,7 +25,7 @@ def inputs(tmp_path):
     return labels, pool
 
 
-def test_create_run(tmp_path):
+def test_create_run(tmp_path, sae_fixture):
     labels, pool = inputs(tmp_path)
     run = create_run(tmp_path, 'F', 10, labels, pool, 0.05, test_model=True)
     launch = json.loads((run / 'launch.json').read_text())
@@ -33,10 +33,39 @@ def test_create_run(tmp_path):
     assert launch['model'] == 'anthropic/claude-haiku-5-5'
     assert launch['image_id'].startswith('sha256:')
     assert (run / 'workspace/TASK.md').read_text() == launch['launch_prompt']
+    from wsp_harness.sae import validate_package
+    dest = run / 'workspace/provided/sae'
+    assert launch['sae_manifest_sha256'] == validate_package(dest)
+    assert dest.stat().st_mode & 0o777 == 0o555
+    assert all(p.stat().st_mode & 0o777 == 0o444 for p in dest.iterdir())
+    shutil.copyfile(tmp_path / '.pi/agents/wsp-arm-f.md', tmp_path / '.pi/agents/wsp-arm-g.md')
+    other = create_run(tmp_path, 'G', 10, labels, pool, 0.05, test_model=True)
+    assert json.loads((other / 'launch.json').read_text())['sae_manifest_sha256'] == launch['sae_manifest_sha256']
+    from wsp_harness.run import REPO
+    for directory in ('agents', 'prompts'):
+        shutil.copyfile(REPO / f'.pi/{directory}/wsp-redteam.md', tmp_path / f'.pi/{directory}/wsp-redteam.md')
+    red = create_run(tmp_path, 'R', 0, labels, pool, 0.05, test_model=True)
+    assert json.loads((red / 'launch.json').read_text())['sae_manifest_sha256'] == launch['sae_manifest_sha256']
+
+
+def test_missing_and_corrupt_sae(tmp_path, sae_fixture):
+    labels, pool = inputs(tmp_path)
+    (sae_fixture / 'README.md').write_text('tampered')
+    with pytest.raises(ValueError, match='hash mismatch'):
+        create_run(tmp_path, 'G', 10, labels, pool, 1, test_model=True)
+    shutil.rmtree(sae_fixture)
+    with pytest.raises(ValueError, match='missing'):
+        create_run(tmp_path, 'F', 10, labels, pool, 1, test_model=True)
+    from wsp_harness.run import REPO
+    for directory in ('agents', 'prompts'):
+        shutil.copyfile(REPO / f'.pi/{directory}/wsp-redteam.md', tmp_path / f'.pi/{directory}/wsp-redteam.md')
+    run = create_run(tmp_path, 'R', 0, labels, pool, 1, test_model=True)
+    assert json.loads((run / 'launch.json').read_text())['sae_manifest_sha256'] is None
+    assert not (run / 'workspace/provided/sae').exists()
 
 
 @pytest.mark.skipif(os.environ.get('WSP_LIVE') != '1', reason='paid live Haiku test')
-def test_live_run(tmp_path):
+def test_live_run(tmp_path, sae_fixture):
     labels, pool = inputs(tmp_path)
     run = create_run(tmp_path, 'F', 10, labels, pool, 0.05, test_model=True)
     container = sandbox_simple.create(run)

@@ -28,6 +28,7 @@ img2 = procedural(img, crop=(0,0,200,200), contrast=1.3, gamma=0.8, flip=True, r
 probe(img, [(0,0,80,80), (80,0,160,80)], score_fn, mode='occlusion')   # or mode='crop'; score_fn(PIL)->float
 ```
 ## Top-k SAE
+Precomputed pool-only SAEs and pool mean latents are available at `/workspace/provided/sae/`; see its README for loading and normalization.
 ```python
 from wsp_toolkit.sae import TopKSAE, train_sae, inspect, mean_latents, load_sae
 sae = TopKSAE(dim=1024, dictionary_size=8192, k=32)

@@ -48,7 +48,7 @@ def sh(container, script):
 
 
 @live
-def test_end_to_end(tmp_path):
+def test_end_to_end(tmp_path, sae_fixture):
     shutil.copytree(FIXTURE / '.pi', tmp_path / '.pi')
     (tmp_path / '.pi/prompts/wsp-launch.md').write_text(PROMPT)
     (tmp_path / '.pi/prompts/wsp-continue.md').write_text(

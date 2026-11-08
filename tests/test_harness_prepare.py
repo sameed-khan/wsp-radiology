@@ -20,6 +20,11 @@ def fixture_data(tmp_path, monkeypatch):
     (pool / 'a').touch()
     os.utime(pool / 'a', (1767225600, 1767225600))
     (data / 'data/agent-pool/current').symlink_to('gen-sanitized')
+    package = data / 'data/agent-sae/current'
+    package.mkdir(parents=True)
+    (package / 'README.md').write_text('fixture')
+    from wsp_harness.evidence import sha256
+    (package / 'manifest.json').write_text(json.dumps({'README.md': sha256(package / 'README.md')}))
     (data / 'models').mkdir()
     (data / 'data/external/extracted').mkdir(parents=True)
     root = tmp_path / 'repo'
@@ -70,6 +75,17 @@ def test_failed_checks_and_invalid_arguments(tmp_path, monkeypatch):
         mod.prepare(root, 20, 1, 'agent', 'proxy', data)
     with pytest.raises(ValueError):
         mod.prepare(root, 10, 2, 'agent', 'proxy', data)
+
+
+def test_missing_or_corrupt_sae_fails_readiness(tmp_path, monkeypatch):
+    root, data = fixture_data(tmp_path, monkeypatch)
+    package = data / 'data/agent-sae/current'
+    (package / 'README.md').write_text('changed')
+    _, report, _ = mod.prepare(root, 10, 1, 'agent', 'proxy', data)
+    assert not report['checks']['sae_package']['ok']
+    shutil.rmtree(package)
+    _, report, _ = mod.prepare(root, 10, 1, 'agent', 'proxy', data)
+    assert not report['ready'] and not report['checks']['sae_package']['ok']
 
 
 def test_unexpected_prompt_difference_is_detected(tmp_path, monkeypatch):

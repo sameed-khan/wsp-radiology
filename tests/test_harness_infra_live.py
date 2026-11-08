@@ -15,7 +15,7 @@ FIXTURE = Path(__file__).parent / 'fixtures/harness/.pi'
 
 
 @pytest.mark.skipif(os.environ.get('WSP_LIVE') != '1', reason='paid live infra test')
-def test_infra_launch_deadline(tmp_path):
+def test_infra_launch_deadline(tmp_path, sae_fixture):
     shutil.copytree(FIXTURE, tmp_path / '.pi')
     (tmp_path / '.pi/prompts/wsp-launch.md').write_text(
         'Use bash to run exactly: nvidia-smi; python -c "import torch;print(torch.cuda.is_available())"; '

@@ -295,6 +295,8 @@ threshold is read from `/workspace/output/model/threshold.json`.
 
 ## 6. Agent toolkit (lane L4)
 
+**Amendment 2026-11-08 (ADR-004):** F and G receive identical precomputed label-free pool-patch SAEs (SKELEX layers 8/12/16/20 and MedSigLIP/DINOv3 at two-thirds depth), pool mean latents and quality statistics in `/workspace/provided/sae/`. R receives the package if present. No test data are included. Agents may ignore these or train their own. The launch receipt records the package manifest hash; readiness checks validate the package. File permissions are read-only, not a security boundary against the workspace owner.
+
 `toolkit/wsp_toolkit/` (pip-installable, used by arm E on the host and in
 the agent image). Documented in `toolkit/TOOLKIT.md` (copied to each
 workspace). Contents: encoder loaders (same adapters as `wsp_ml`, path
