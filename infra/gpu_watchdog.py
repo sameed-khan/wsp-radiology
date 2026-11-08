@@ -36,6 +36,22 @@ def _processes() -> list[tuple[int, int]]:
     return processes
 
 
+def _utilization() -> dict[int, int]:
+    """Return the sampled SM utilization per host PID, when NVIDIA reports it."""
+    output = _run("nvidia-smi", "pmon", "-c", "1", "-s", "u")
+    result = {}
+    for line in output.splitlines():
+        fields = line.split()
+        if not fields or line.lstrip().startswith("#"):
+            continue
+        if len(fields) < 4:
+            raise ValueError("unexpected nvidia-smi pmon output")
+        if fields[1].isdigit() and fields[3].isdigit():
+            pid, utilization = int(fields[1]), int(fields[3])
+            result[pid] = result.get(pid, 0) + utilization
+    return result
+
+
 def _container_pid(pid: int, container_id: str) -> int | None:
     """Return the innermost namespace PID only for a matching cgroup."""
     try:
@@ -53,6 +69,12 @@ def _container_pid(pid: int, container_id: str) -> int | None:
 def poll(containers: dict[str, tuple[str, float]], log_path: Path,
          sample: bool) -> None:
     processes = _processes()
+    utilization = None
+    if sample:
+        try:
+            utilization = _utilization()
+        except (OSError, subprocess.CalledProcessError, ValueError):
+            _log(log_path, event="utilization-unavailable")
     for name, (container_id, cap_gib) in containers.items():
         members = []
         for pid, memory_mib in processes:
@@ -61,11 +83,22 @@ def poll(containers: dict[str, tuple[str, float]], log_path: Path,
                 members.append((memory_mib, pid, nspid))
         total = sum(item[0] for item in members)
         if sample:
-            _log(log_path, event="sample", container=name, memory_mib=total)
+            # Missing process readings are unknown, not zero utilization.
+            readings = [utilization.get(pid) for _, pid, _ in members] if utilization is not None else []
+            sm_percent = (sum(readings) if readings and all(value is not None for value in readings)
+                          else 0 if utilization is not None and not members else None)
+            _log(log_path, event="sample", container=name, memory_mib=total,
+                 sm_utilization_percent=sm_percent)
         if total > cap_gib * 1024 and members:
             memory_mib, pid, nspid = max(members)
             # Recheck identity immediately before signalling; processes can disappear.
             if _container_pid(pid, container_id) != nspid:
+                continue
+            # Linux protects a PID namespace's init from signals sent by its
+            # own namespace. docker exec kill can exit 0 without killing it.
+            if nspid == 1:
+                _log(log_path, event="kill-failed", container=name, pid=pid,
+                     memory_mib=total, cap_gib=cap_gib, reason="namespace-init")
                 continue
             try:
                 _run("docker", "exec", "-u", "0", name, "kill", "-9", str(nspid))

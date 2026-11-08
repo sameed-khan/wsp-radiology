@@ -26,3 +26,4 @@ packages = ["src/wsp_prep", "infra"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["docker: requires Docker and an NVIDIA GPU"]
