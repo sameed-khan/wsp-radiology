@@ -61,6 +61,7 @@ def agent_write(sb, t, rel, data):
     stage(t, rel, data)
     r = ex(sb, "sh", "-c", f"mkdir -p \"$(dirname /workspace/{rel})\" && cp /workspace/.stage/f /workspace/{rel}")
     assert r.returncode == 0, r.stderr
+    (t / "ws" / ".stage" / "f").unlink()
 
 
 def test_watcher_against_real_sandbox_workspace(env):
@@ -70,7 +71,6 @@ def test_watcher_against_real_sandbox_workspace(env):
     with zipfile.ZipFile(z, "w") as zf:
         zf.writestr("m/t.jpg", TEST_JPG)
     agent_write(sb, t, "clean/ok.jpg", enc(make_image(1234)))
-    agent_write(sb, t, "out/pool_copy.jpg", POOL_JPG)
     agent_write(sb, t, "out/pool_small.jpg", enc(POOL_IM.resize((150, 110)), quality=50))
     agent_write(sb, t, "out/notes.txt", b"just notes")
     argv = [sys.executable, "-m", "infra.watcher", "--workspace", str(spec.workspace), "--corpus", str(spec.hash_corpus),
@@ -89,8 +89,8 @@ def test_watcher_against_real_sandbox_workspace(env):
 
         assert wait(lambda: any(e.get("event") == "scan" for e in events(log)))
         f1 = {e["file"]: (e["level"], e["rule"]) for e in events(log) if e.get("event") == "finding"}
-        assert f1 == {"out/pool_copy.jpg": ("info", "pool-derivative"), "out/pool_small.jpg": ("info", "pool-derivative")}, f1
-        assert not (ctl / W.STOP_FILE).exists()  # pool derivatives never stop the run
+        assert f1 == {"out/pool_small.jpg": ("info", "pool-derivative")}, f1
+        assert not (ctl / W.STOP_FILE).exists()  # non-exact pool derivatives do not stop the run
         # agent now writes a test-split derivative inside an archive; on-demand scan via SIGUSR1
         agent_write(sb, t, "out/results.zip", z.getvalue())
         proc.send_signal(signal.SIGUSR1)

@@ -243,9 +243,9 @@ def test_watcher_detections_and_pool_derivatives(e2e):
         (st / "f").write_bytes(data)
         r = x.ex("sh", "-c", f'mkdir -p "$(dirname /workspace/{rel})" && cp /workspace/.stage/f /workspace/{rel}')
         assert r.returncode == 0, r.stderr
+        (st / "f").unlink()
 
     agent_put("res/ok.jpg", wenc(make_image(4321)))
-    agent_put("res/pool.jpg", POOL_JPG)
     agent_put("res/pool_small.jpg", wenc(POOL_IM.resize((140, 100)), quality=50))
     agent_put("res/report.txt", b"nothing here")
     argv = [sys.executable, "-m", "infra.watcher", "--workspace", str(spec.workspace), "--corpus", str(spec.hash_corpus),
@@ -267,7 +267,14 @@ def test_watcher_detections_and_pool_derivatives(e2e):
     try:
         assert wait(lambda: scans() >= 1)
         fnd = {ev["file"]: (ev["level"], ev["rule"]) for ev in events(log) if ev.get("event") == "finding"}
-        assert fnd == {"res/pool.jpg": ("info", "pool-derivative"), "res/pool_small.jpg": ("info", "pool-derivative")}, fnd
+        assert fnd == {"res/pool_small.jpg": ("info", "pool-derivative")}, fnd
+        assert not (ctl / "STOP_REQUEST.json").exists()
+        # A resized test-near image alerts, not stops.
+        n = scans()
+        agent_put("res/near-zero.png", wenc(TEST_IM.resize((128, 96)), "PNG"))
+        proc.send_signal(signal.SIGUSR1)
+        assert wait(lambda: scans() > n)
+        assert any(ev.get("file") == "res/near-zero.png" and ev.get("level") == "alert" for ev in events(log))
         assert not (ctl / "STOP_REQUEST.json").exists()
         # alert-only band: pHash distance 3-6 from the test image
         n = scans()

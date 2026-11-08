@@ -148,11 +148,19 @@ Both run on the trusted host, never inside the sandbox; their state/control dirs
   scans new/changed regular files (symlinks never followed; mtime/size/inode cache; SIGUSR1 = scan now).
   It reuses the proxy's scanner (`wsp_content`: sha256, normalized-pixel sha, pHash, JPEG/PNG carving,
   base64, bounded recursive archives, basenames). **stop** (writes `D/STOP_REQUEST.json`
-  `{reason,file,rule,time}`): archive sha256; exact MFXR image that is not a pool image; pHash <= 2 to a test-split
-  image; >= 3 distinct MFXR basenames. **alert**: pHash 3..6 to a test image; unscannable/oversize (> 2 GiB) content.
-  **info `pool-derivative`**: image matches only pool images (pHash <= 6 to pool, > 6 from test). A file near both a
-  pool and a test image is judged by the test image (conservative). Logs (`S/watcher.jsonl`) hold only relative path,
-  rule, size - never hashes, basenames or content.
+  `{reason,file,rule,time}`): exact raw or normalized SHA-256 of any MFXR image (including pool images), archive SHA-256,
+  or >= 3 distinct MFXR basenames. **alert**: pHash 0..6 to a test image; unscannable/oversize (> 2 GiB) content.
+  **info `pool-derivative`**: non-exact image matches only pool images (pHash <= 6 to pool, > 6 from test). A file near both a
+  pool and a test image is judged by the test image. Exact matches always take precedence. `--phash-stop-distance N`
+  explicitly opts into stopping for test pHash distance <= N (0..6); by default no test pHash alone stops a run.
+  Logs (`S/watcher.jsonl`) hold only relative path, rule, size - never hashes, basenames or content.
+
+Calibration: `.runtime/overlap-calibration.json` recorded 64,358 external images hashed, 63 failures,
+7 test images with external matches <= 4, including one <= 2; inspection identified radiograph pHash false positives.
+The calibrated decision is alert-only with orchestrator visual review at hourly checks. This supersedes the original
+spec's <= 2 stop rule. The proxy retains pHash <= 4 blocking; sensitivity re-scoring excludes the 7 affected test images.
+Exact pool image copies also stop under the calibration's exact-hash rule, despite pool access being permitted; avoid copying
+those bytes into the workspace or handle the resulting stop as an infrastructure/protocol issue.
 - `python -m infra.gpu_watchdog --state-dir S (--container NAME:CAP_GIB | --sandbox-json S/sandbox.json)`.
   Kills the largest GPU process of a container that exceeds its cap, as that process's own UID:
   the sandbox drops all capabilities, so `docker exec -u 0 ... kill` fails with EPERM against UID 1004 processes
@@ -160,7 +168,7 @@ Both run on the trusted host, never inside the sandbox; their state/control dirs
   ever started with `docker exec` (never PID 1), and a PID-1 over-cap is logged as `kill-failed`.
 
 Limitations: the watcher is periodic (120 s) so a file created and deleted between scans is missed; the pHash
-thresholds are not yet calibrated against the section 8.3 audit; archive/size limits make some content only
+calibration has observed false positives and 63 external hash failures; archive/size limits make some content only
 alert-level; the watchdog polls every 5 s (transient overage possible) and PID reuse between check and kill is
 narrowed (identity re-check) but not eliminated. Neither process is started by `sandbox.create`.
 
@@ -182,7 +190,7 @@ TEST-ONLY `test_allow_ips` flag. Every request is issued from inside the agent a
 - synthetic hash corpus: raw bytes, re-encoded/resized (pHash), inside a zip, carved from a parquet-like blob, basename
   text list are blocked with nothing but the 403 text saved; clean image/text allowed; proxy logs hold no basenames/canary;
 - `nvidia-smi` and a CUDA torch matmul in the agent;
-- watcher: pool derivatives (copy, resized) only `info`, pHash 3-6 -> alert (no stop), test-split exact copy -> STOP_REQUEST.json,
+- watcher: non-exact pool derivatives only `info`, test pHash 0-6 -> alert (no stop), exact image copy -> STOP_REQUEST.json,
   basenames text -> stop-level finding; watcher log has no hashes/basenames; control/state dirs invisible in the agent;
 - no docker.sock, canary "locked"/credential files, private CA key, host state dirs or secret-looking env in the agent;
   labels dir holds only labels.csv; the Step 4 topology tests check the exact six bind mounts;
@@ -190,8 +198,7 @@ TEST-ONLY `test_allow_ips` flag. Every request is issued from inside the agent a
 
 DNS: Docker's embedded DNS on the internal network does not resolve external names (tested at step 2 and in step 6);
 agents depend on the proxy resolving names. Residual risks: see the Limitations lists above (loopback inside the
-agent is NO_PROXY so agent-local services are reachable by design; pHash thresholds uncalibrated and the real L1 corpus
-never exercised; watcher periodic; watchdog polling/PID-reuse; IPv6/non-443 ports not exhaustive; the proxy and agent
+agent is NO_PROXY so agent-local services are reachable by design; calibrated pHash alerts require human review; watcher periodic; watchdog polling/PID-reuse; IPv6/non-443 ports not exhaustive; the proxy and agent
 images are tagged `step*` and not digest-pinned in the API; unhashed pip pins; no independent review was performed;
 red-team of tool-level exfiltration channels (e.g. DNS tunnelling via the proxy's allowed domains, slow-drip uploads to
 allowed hosts) is not done).
