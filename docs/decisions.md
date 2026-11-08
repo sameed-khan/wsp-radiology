@@ -92,3 +92,26 @@ the plan's required network controls, red team, label isolation or audit.
   SKELEX derivative redistribution rights.
 - The investigator rebooted successfully. Host and Docker GPU visibility
   were subsequently verified; ML training validation remains separate.
+
+## ADR-002: Haiku-only subagents for F/G and orchestrator role
+
+**Status:** accepted by the investigator, 2026-11-08.
+
+- F and G agents may spawn an unlimited number of subagents, but subagents
+  must be `anthropic/claude-haiku-5-5` only. The model is hard-coded in the
+  trusted harness tool; agents cannot select another model. Subagents may
+  not spawn further subagents (one level only). Concurrency is capped
+  identically for F and G (8 concurrent children) to protect shared API
+  limits; total count is unlimited.
+- Subagents execute in the same session container, obey the same rules
+  (F's prohibition of direct weight writes applies to F's subagents) and
+  their complete histories are recorded host-side under ADR-001. Images
+  read by subagents are logged as LLM-derived labels.
+- The orchestrator (parent Pi session talking to the investigator) does not
+  execute F/G work; it builds/freezes the harness, launches, monitors,
+  resolves infrastructure blockers without task advice, freezes, evaluates
+  and audits. Opus 5.5 agents perform the F/G work.
+- Cost reporting: per-session token usage and API-equivalent cost from Pi
+  session records (parent + subagents), reported as list-price estimates
+  (`totalFromProvider: false`; access is subscription OAuth), with the price
+  table archived.

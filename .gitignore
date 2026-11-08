@@ -19,3 +19,5 @@ __pycache__/
 !/artifacts/.gitignore
 # agent folder contains temporary handoffs and other housekeeping
 agent/
+runs/
+features/
