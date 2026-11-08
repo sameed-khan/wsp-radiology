@@ -124,3 +124,17 @@ IPv6, or protocols. No private destination blocking is implemented yet.
   red-team tests before a pilot. Never mount locked data, host credentials or
   the Docker socket in an agent. No actual MFXR content was fetched or tested
   in this smoke test.
+
+## Step 4 sandbox lifecycle API (`infra/sandbox.py`)
+
+`create(SandboxSpec)` builds, per run id (`[a-z0-9][a-z0-9_.-]{0,39}`): internal+isolated network `wsp-int-<run>`,
+proxy `wsp-proxy-<run>` (internal + `wsp-egress`, runs as the host user with cap-drop ALL, read-only rootfs, mounts the
+0700 private CA dir, host-only log dir and corpus read-only), and agent `wsp-agent-<run>` (internal network only,
+user 1004:1004, cap-drop ALL, no-new-privileges, read-only rootfs, tmpfs /tmp 16g, shm 16g, pids 4096, memory/swap
+cap, cpus, `--gpus device=0`, tini + `sleep infinity`; mounts only /workspace rw, /inputs/{pool,labels,models,external}
+ro, /opt/wsp-ca ro; proxy and CA env vars). All resources carry label `wsp.run=<run>`; `destroy()` is idempotent and only
+removes labelled resources. CA is generated per installation in `state_dir/ca` (or `ca_dir`). `labels_dir` must contain
+only `labels.csv`. `pause` freezes the agent only (proxy keeps running). Run the CLI with `python -m infra.sandbox`.
+Tests: `uv run --extra test pytest -q tests/infra/test_sandbox_step4_docker.py` (needs images `wsp-agent-base:step1`,
+`wsp-proxy:step3`). Limits: GPU watchdog/watcher are not launched by `create` (step 5; `state_dir/sandbox.json` holds the
+`container:cap` argument); the proxy image tag default is `wsp-proxy:step3`.
