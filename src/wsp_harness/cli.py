@@ -80,7 +80,8 @@ def cmd_launch(args) -> int:
         missing = [n for n in ('models_dir', 'external_dir', 'image', 'hash_corpus') if not getattr(args, n)]
         if missing:
             raise SystemExit('error: --backend infra needs ' + ', '.join('--' + m.replace('_', '-') for m in missing))
-    run = create_run(root, args.arm, args.k, Path(args.labels), Path(args.pool), args.hours, test_model=args.test_model)
+    run = create_run(root, args.arm, args.k, Path(args.labels), Path(args.pool), args.hours,
+                     test_model=args.test_model, image=args.image if args.backend == 'infra' else 'ubuntu:24.04')
     if args.backend == 'infra':
         (run / 'state/backend.json').write_text(json.dumps({
             'models_dir': str(Path(args.models_dir).resolve()), 'external_dir': str(Path(args.external_dir).resolve()),

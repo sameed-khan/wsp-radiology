@@ -39,10 +39,9 @@ def create(run: Path) -> str:
     launch = json.loads((run / 'launch.json').read_text())
     cfg = _config(run)
     mod = _sandbox_module()
-    (run / 'state/sandbox').mkdir(exist_ok=True)
     kwargs = dict(run_id=launch['run_id'], workspace=run / 'workspace', pool_dir=Path(launch['pool_dir']),
                   labels_dir=Path(launch['labels_dir']), models_dir=Path(cfg['models_dir']),
-                  external_dir=Path(cfg['external_dir']), image=cfg['image'], state_dir=run / 'state/sandbox',
+                  external_dir=Path(cfg['external_dir']), image=cfg['image'], state_dir=run / 'state',
                   hash_corpus=Path(cfg['hash_corpus']))
     if cfg.get('gpu_mem_cap_gib') is not None:
         kwargs['gpu_mem_cap_gib'] = float(cfg['gpu_mem_cap_gib'])
@@ -73,7 +72,7 @@ def helper_argv(run: Path, container: str) -> list[list[str]]:
         [py, '-m', 'infra.watcher', '--workspace', str(run / 'workspace'), '--corpus', str(cfg['hash_corpus']),
          '--state-dir', str(run / 'state/watcher'), '--control-dir', str(run / 'control')],
         [py, '-m', 'infra.gpu_watchdog', '--state-dir', str(run / 'state/gpu'),
-         '--container', f"{container}:{cfg.get('gpu_mem_cap_gib', 11.0)}"],
+         '--sandbox-json', str(run / 'state/sandbox.json')],
     ]
 
 
@@ -83,9 +82,26 @@ def start_helpers(run: Path, container: str) -> None:
         (run / 'state' / name).mkdir(exist_ok=True)
     env = {k: v for k, v in os.environ.items() if k in ('PATH', 'HOME', 'LANG', 'PYTHONPATH')}
     for argv in helper_argv(run, container):
-        log = (run / 'state' / f'{argv[2].split(".")[-1]}.log').open('ab')
-        _HELPERS.append(subprocess.Popen(argv, stdout=log, stderr=log, stdin=subprocess.DEVNULL, env=env,
-                                         cwd=Path(__file__).resolve().parents[2], start_new_session=True))
+        _spawn_helper(run, argv, env)
+
+
+def _spawn_helper(run: Path, argv: list[str], env=None) -> None:
+    if env is None:
+        env = {k: v for k, v in os.environ.items() if k in ('PATH', 'HOME', 'LANG', 'PYTHONPATH')}
+    with (run / 'state' / f'{argv[2].split(".")[-1]}.log').open('ab') as log:
+        proc = subprocess.Popen(argv, stdout=log, stderr=log, stdin=subprocess.DEVNULL, env=env,
+                                cwd=Path(__file__).resolve().parents[2], start_new_session=True)
+    _HELPERS.append(proc)
+
+
+def check_helpers(run: Path, container: str, log) -> None:
+    for argv, proc in zip(helper_argv(run, container), list(_HELPERS)):
+        if proc.poll() is not None:
+            _HELPERS.remove(proc)
+            log(f'helper {argv[2]} exited {proc.returncode}; restarting')
+            _spawn_helper(run, argv)
+    # Restore stable ordering for the next health check.
+    _HELPERS.sort(key=lambda p: 0 if 'infra.watcher' in p.args else 1)
 
 
 def stop_helpers() -> None:

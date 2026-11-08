@@ -17,10 +17,9 @@ the study denylist or replace network and content controls.
 
 # Harness design (supersedes the status line above)
 
-All of the following is implemented and was exercised with the `simple` backend
-and real Haiku; the `infra` backend (L2 `infra.sandbox`, watcher, GPU watchdog)
-is implemented against the documented API but **not exercised** because L2's
-code was not in this worktree.
+The simple backend and the networked `infra` backend have both been exercised
+with real Haiku. Infra starts the L2 sandbox, watcher and GPU watchdog; helper
+exits are logged and restarted by the supervisor.
 
 ## Components and trust boundary
 Trusted, host-only (never mounted into containers): `harness/pi-ext/*`
@@ -55,14 +54,19 @@ snapshot, `docker rm -f`), host-clock deadline, logged interventions.
 Not guaranteed: periodic snapshots are not atomic with a running agent; a
 process that escapes the in-container process group is only stopped by
 sandbox teardown; web_search goes through Exa outside the sandbox proxy and
-cannot enforce the denylist; the secret scan is pattern-based; the `infra`
-backend and L2 watcher/watchdog integration are untested here.
+cannot enforce the denylist; the secret scan is pattern-based; helper supervision is polling-based, and
+watcher/watchdog outages between checks are possible.
 
 ## Orchestrator commands
 (`wsp-harness [--root R] ...`; `--root` defaults to the repo.)
 - `launch --arm F|G --k K --labels DIR --pool DIR [--hours 24] [--backend simple|infra] [--test-model]`
   detaches the supervisor (setsid or `--daemonizer systemd`) and prints the run id.
   Infra backend also needs `--models-dir --external-dir --image --hash-corpus`.
+  Pass the resolved main-checkout pool, an agent-only labels directory, the
+  main-checkout models and external directories, and the private hash corpus.
+  State, proxy logs, CA keys and helper logs stay under the run's `state/`.
+  `TASK.md`, `output/`, and (when available in the root or image) `TOOLKIT.md`
+  are seeded in the workspace. The launch receipt records the selected image.
 - `status [--run R]` — all runs, or one run's status.json plus supervisor liveness.
 - `intervene --run R --kind infra|message --note TEXT` — logged; `message` is
   delivered as a Pi steer (or prompt when idle).

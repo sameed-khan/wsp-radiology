@@ -305,6 +305,9 @@ class Supervisor:
                 return 'deadline'
             if (reason := self.stop_request()) is not None:
                 return f'stop-request: {reason}'
+            check = getattr(self.backend, 'check_helpers', None)
+            if check:
+                check(self.run, self.container, self.log)
             self.deliver_messages()
             if now >= next_snapshot:
                 try:

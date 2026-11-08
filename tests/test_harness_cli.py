@@ -155,7 +155,7 @@ def test_infra_helper_argv(tmp_path):
     (tmp_path / 'state/backend.json').write_text(json.dumps({'hash_corpus': '/c', 'gpu_mem_cap_gib': 11.0}))
     w, g = sandbox_infra.helper_argv(tmp_path, 'wsp-agent-x')
     assert w[1:4] == ['-m', 'infra.watcher', '--workspace'] and '--control-dir' in w
-    assert g[-2:] == ['--container', 'wsp-agent-x:11.0'] and '--state-dir' in g
+    assert g[-2:] == ['--sandbox-json', str(tmp_path / 'state/sandbox.json')] and '--state-dir' in g
 
 
 @live
