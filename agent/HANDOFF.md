@@ -2,6 +2,10 @@
 
 Checkpoint: 2026-11-08. Repository on the GPU host:
 `/home/skhanxx8/projects/wsp-radiology`.
+The reviewed implementation, documentation, this handoff and setup-evidence
+DVC pointer are committed and published on `origin/master` at
+`git@github.com:sameed-khan/wsp-radiology.git`. Use `git log` for the exact
+current revision; no public dataset/model bytes or credentials are in Git.
 
 **The project is NOT pilot-ready. No feature extraction, baseline training,
 pseudo-label inference, locked-test scoring, or experimental F/G sessions

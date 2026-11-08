@@ -61,8 +61,8 @@ This is an operational checkpoint, not a frozen preregistration.
   An independent rclone retrieval of the DVC remote object matched that
   hash and all six per-file manifest hashes. A second test moved aside
   both the local archive and its DVC cache object: `dvc pull` from `b2`
-  restored the archive with the same SHA-256. The pointer is uncommitted,
-  like the other implementation files; a fresh-checkout test is separate
+  restored the archive with the same SHA-256. The pointer is committed
+  with the reviewed implementation; a fresh-checkout test is separate
   from this successful cold-cache restore. No public assets were uploaded.
   DVC's local credential file was found group/world-readable and restricted
   to mode 0600; the DVC cache, staging and archive directory are mode 0700.
