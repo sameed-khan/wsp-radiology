@@ -74,12 +74,18 @@ training prior and threshold 0.5. k=0 uses no target tuning and threshold
   makes selected OOF AUROC optimistic; tiny allocations can be unstable.
 * **H:** reuse `features/external-manifests/`: GRAZ `fracture_visible`
   (6,777 negative / 13,550 positive), FracAtlas `fractured` (3,364 /
-  719), MURA labeled train+valid studies (23,606 / 16,403; positive is
+  719), MURA labeled train+valid studies (23,602 / 16,403; positive is
   abnormal, not necessarily fracture). Uniformly sample 40,000 images
   without replacement from the union, seed 7; inverse-frequency loss
   weights balance classes, rather than balanced sampling. One epoch of
   B-lora recipe retains the partial final batch. External image loading
-  permits truncated JPEGs. Save private LoRA+head checkpoint; k=0 uses it
+  permits truncated JPEGs. Manifests fully decode images and exclude AppleDouble
+  sidecars and undecodable files: regeneration removed four negative MURA
+  sidecars (40,009 → 40,005); no other undecodable files were found.
+  Pretraining logs decoding failures, skips them, and fails above 0.5% of
+  the sampled images. Class weights use sampled labels before any skips;
+  failures and the trained count are recorded in the private checkpoint receipt.
+  Manifest hash changes invalidate cached pretraining. Save private LoRA+head checkpoint; k=0 uses it
   directly, k>0 continues both adapter and transferred head with a new
   optimizer and the B-lora schedule. Smaller samples are validation only
   and use separate paths.
