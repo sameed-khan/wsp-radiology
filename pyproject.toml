@@ -27,10 +27,11 @@ wsp-eval = "wsp_eval.cli:main"
 wsp-harness = "wsp_harness.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/wsp_eval", "src/wsp_harness", "src/wsp_ml", "src/wsp_prep"]
+packages = ["infra", "src/wsp_eval", "src/wsp_harness", "src/wsp_ml", "src/wsp_prep"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["docker: requires Docker and an NVIDIA GPU"]
 
 [tool.uv.sources]
 torch = { index = "pytorch-cu128" }

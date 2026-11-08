@@ -1,0 +1,8 @@
+# Build from the repository root after the L4 toolkit is available:
+# docker build -f infra/agent/Dockerfile.toolkit -t wsp-agent:TAG .
+ARG BASE_IMAGE=wsp-agent-base:latest
+FROM ${BASE_IMAGE}
+USER root
+COPY toolkit/ /opt/wsp-toolkit/
+RUN python3 -m pip install --no-cache-dir /opt/wsp-toolkit
+USER 1004:1004
