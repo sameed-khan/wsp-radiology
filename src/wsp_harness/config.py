@@ -60,11 +60,11 @@ def pi_argv(inputs: Inputs, repo: Path, recorder: Path) -> list[str]:
 
 def load_inputs(root: Path, arm: str, *, allow_test_model: bool = False) -> Inputs:
     arm = arm.upper()
-    if arm not in {'F', 'G'}:
-        raise ValueError('arm must be F or G')
+    if arm not in {'F', 'G', 'R'}:
+        raise ValueError('arm must be F, G or R')
     paths = {
-        'arm': root / '.pi' / 'agents' / f'wsp-arm-{arm.lower()}.md',
-        'launch': root / '.pi' / 'prompts' / 'wsp-launch.md',
+        'arm': root / '.pi' / 'agents' / ('wsp-redteam.md' if arm == 'R' else f'wsp-arm-{arm.lower()}.md'),
+        'launch': root / '.pi' / 'prompts' / ('wsp-redteam.md' if arm == 'R' else 'wsp-launch.md'),
         'continue': root / '.pi' / 'prompts' / 'wsp-continue.md',
         'weights': root / '.pi' / 'prompts' / 'weight-sentences.json',
     }
@@ -91,8 +91,10 @@ def load_inputs(root: Path, arm: str, *, allow_test_model: bool = False) -> Inpu
     if len(set(tools)) != len(tools):
         raise ValueError('duplicate tool in allowlist')
     weights = json.loads(raw['weights'])
-    if not isinstance(weights, dict) or not isinstance(weights.get(arm), str) or not weights[arm].strip():
+    if arm != 'R' and (not isinstance(weights, dict) or not isinstance(weights.get(arm), str) or not weights[arm].strip()):
         raise ValueError('missing weight sentence')
+    if arm == 'R' and allow_test_model:
+        model = 'anthropic/claude-haiku-5-5'
     return Inputs(model, thinking, tuple(tools), match.group(2),
                   raw['launch'].decode('utf-8'), raw['continue'].decode('utf-8'),
-                  weights[arm], {name: digest(data) for name, data in raw.items()})
+                  '' if arm == 'R' else weights[arm], {name: digest(data) for name, data in raw.items()})

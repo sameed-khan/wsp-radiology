@@ -36,6 +36,14 @@ def create_run(root: Path, arm: str, k: int, labels_dir: Path, pool_dir: Path,
         raise ValueError('hours must be positive and finite')
     if not pool_dir.is_dir() or not labels_dir.is_dir():
         raise ValueError('pool and labels must be directories')
+    if arm.upper() == 'R':
+        import csv
+        with (labels_dir / 'labels.csv').open(newline='', encoding='utf-8-sig') as f:
+            rows = list(csv.reader(f))
+        if rows != [['image', 'patient', 'label']] or k != 0:
+            raise ValueError('arm R requires k=0 and a header-only labels.csv')
+        if {p.name for p in labels_dir.iterdir()} != {'labels.csv'}:
+            raise ValueError('arm R labels directory must contain only labels.csv')
     labels_hash = sha256(labels_dir / 'labels.csv')
     inputs = load_inputs(root, arm, allow_test_model=test_model)
     image_id = subprocess.check_output(['docker', 'image', 'inspect', image, '--format', '{{.Id}}'], text=True).strip()

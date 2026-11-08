@@ -537,7 +537,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument('--proxy-image', default='wsp-proxy:step3')
     s.set_defaults(func=cmd_prepare)
     s = sub.add_parser('launch', help='create a run and start a detached supervisor')
-    s.add_argument('--arm', required=True, choices=['F', 'G', 'f', 'g'])
+    s.add_argument('--arm', required=True, choices=['F', 'G', 'R', 'f', 'g', 'r'])
     s.add_argument('--k', type=int, required=True)
     s.add_argument('--labels', required=True)
     s.add_argument('--pool', required=True)
