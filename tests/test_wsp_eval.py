@@ -51,10 +51,11 @@ def test_score_missing_predictions(tmp_path, monkeypatch):
 
 def test_docker_inference_arguments(tmp_path):
     from wsp_eval.inference import docker_args
-    for name in ('workspace', 'images', 'out'): (tmp_path/name).mkdir()
-    cmd = docker_args('agent:local', 'wsp-eval-test', tmp_path/'workspace', tmp_path/'images', tmp_path/'out')
+    for name in ('workspace', 'images', 'out', 'models'): (tmp_path/name).mkdir()
+    cmd = docker_args('agent:local', 'wsp-eval-test', tmp_path/'workspace', tmp_path/'images', tmp_path/'out', tmp_path/'models')
     assert cmd[:6] == ['docker', 'create', '--name', 'wsp-eval-test', '--network', 'none']
-    assert '--gpus' in cmd and 'all' in cmd
+    assert '--gpus' in cmd and 'device=0' in cmd
+    assert f'type=bind,src={tmp_path}/models,dst=/inputs/models,readonly' in cmd
     assert f'type=bind,src={tmp_path}/workspace,dst=/workspace,readonly' in cmd
     assert f'type=bind,src={tmp_path}/images,dst=/eval/images,readonly' in cmd
     assert f'type=bind,src={tmp_path}/out,dst=/eval/out' in cmd
@@ -166,7 +167,7 @@ def test_inference_timeout_and_gpu_violation_stop_container(tmp_path, monkeypatc
     monkeypatch.setattr(inference.subprocess, 'check_output', check_output)
     monkeypatch.setattr(inference.subprocess, 'run', run)
     def args(name):
-        return Namespace(out=tmp_path/'data/locked/private'/name, workspace=workspace, images=images, image='agent')
+        return Namespace(out=tmp_path/'data/locked/private/runs'/name, workspace=workspace, images=images, models=images, image='agent')
     monkeypatch.setattr(inference, '_gpu_usage', lambda _: 11265)
     with pytest.raises(RuntimeError, match='GPU memory cap'): inference.infer(args('gpu'))
     assert ['docker','rm','-f',cid] in stopped
@@ -188,7 +189,7 @@ def test_inference_scores_with_frozen_threshold(tmp_path, monkeypatch):
     (workspace/'output/model/threshold.json').write_text('{"threshold": 0.37}')
     images = tmp_path/'images'; images.mkdir()
     cid = 'b'*64
-    out = tmp_path/'data/locked/private/run'
+    out = tmp_path/'data/locked/private/runs/run'
     def check_output(command, **kwargs):
         if command[1] == 'create': return cid
         return 'false 0'
@@ -200,5 +201,5 @@ def test_inference_scores_with_frozen_threshold(tmp_path, monkeypatch):
     monkeypatch.setattr(inference, '_gpu_usage', lambda _: 0)
     observed = []
     monkeypatch.setattr(cli, 'score', lambda args: observed.append(args.threshold))
-    inference.infer(Namespace(out=out, workspace=workspace, images=images, image='agent'))
+    inference.infer(Namespace(out=out, workspace=workspace, images=images, models=images, image='agent'))
     assert observed == [.37]
