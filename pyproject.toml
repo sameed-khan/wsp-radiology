@@ -12,6 +12,7 @@ dependencies = [
   "ImageHash>=4.3,<5",
   "requests>=2.32,<3",
   "numpy>=2,<3",
+  "pyyaml>=6.0,<7",
 ]
 
 [project.optional-dependencies]
@@ -23,9 +24,10 @@ test = ["pytest>=8.3,<9", "scikit-learn>=1.5,<2"]
 wsp-ml = "wsp_ml.cli:main"
 wsp-prep = "wsp_prep.cli:main"
 wsp-eval = "wsp_eval.cli:main"
+wsp-harness = "wsp_harness.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/wsp_prep", "src/wsp_eval", "src/wsp_ml"]
+packages = ["src/wsp_eval", "src/wsp_harness", "src/wsp_ml", "src/wsp_prep"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
