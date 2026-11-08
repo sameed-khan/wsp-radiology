@@ -1,9 +1,14 @@
-# Offline Docker containment prototype — NOT launch-ready
+# Docker sandbox — not yet launch-ready
 
-This is a CPU-only, **offline smoke-test fixture**, not an agent deployment.
-It implements only a smaller containment slice of plan section 5.2. It has
-no proxy, external route, agent, target hashes, data, credentials, or GPU.
-Do not use it to run a pilot, red team, or agent. No red-team result is implied.
+The networked implementation and its end-to-end tests are described in Steps 4–6
+below. Launch remains blocked by the outstanding calibration, integration and
+red-team work described there. Independent code review was waived.
+
+## Historical offline containment fixture
+
+The following CPU-only offline smoke-test fixture is separate from the networked
+sandbox. It has no proxy, external route, agent, target hashes, data, credentials,
+or GPU. No red-team result is implied.
 Docker is the user-authorized substitution for the plan's Podman. The Docker
 socket remains on the host; anyone with access to that socket can escape the
 container boundary, and Docker rootful remains part of the trusted host.
@@ -52,16 +57,12 @@ versions are pinned; transitive apt dependencies and repositories are not
 snapshot-pinned. Rebuilds may fail if versions disappear or may differ in
 transitive dependencies. Host package trust must not be bypassed.
 
-## Step 2 transport prototype — NOT launch-ready
+## Historical Step 2 transport prototype
 
-`infra/proxy/Dockerfile` builds a digest-pinned mitmproxy image; its addon
-only logs completed HTTP responses and **does not block any URL, destination,
-content or upload**. Do not attach an untrusted agent. The logging skeleton
-records host, path without query, URL hash, sizes, status and content hash;
-paths can themselves contain secrets, and error/incomplete flows are not yet
-recorded. Proxy diagnostic output may also contain sensitive information and
-must remain host-only. Step 3 must implement and review the full policy and
-fail-closed, complete logging before use.
+Step 2 originally provided transport and logging only; Step 3 subsequently
+added policy and content scanning. Proxy logs include paths without query
+strings, and paths can themselves contain secrets. Proxy diagnostic output
+may also contain sensitive information; keep all logs host-only.
 
 Generate an installation CA on the trusted host with
 `python -m infra.proxy.ca /private/new-ca-dir /public/new-ca-dir` (both paths
@@ -91,7 +92,7 @@ This observation is host/configuration dependent and does not establish a
 DNS security boundary. The TCP probes do not exhaust all host ports, addresses,
 IPv6, or protocols. No private destination blocking is implemented yet.
 
-## Mandatory blockers before any networked launch
+## Historical blockers list (written at step 2; steps 3-6 implement the items below, see the Step 6 section for status)
 
 * Design, implement, and independently review a separate TLS-intercepting
   proxy with its own generated CA, explicit proxy environment and CA trust;
@@ -162,3 +163,35 @@ Limitations: the watcher is periodic (120 s) so a file created and deleted betwe
 thresholds are not yet calibrated against the section 8.3 audit; archive/size limits make some content only
 alert-level; the watchdog polls every 5 s (transient overage possible) and PID reuse between check and kill is
 narrowed (identity re-check) but not eliminated. Neither process is started by `sandbox.create`.
+
+## Step 6: end-to-end suite and residual risks
+
+`uv run --extra test pytest -q -m docker` runs all live Docker tests. The focused
+`uv run --extra test pytest -q -m docker tests/infra/test_e2e_sandbox_docker.py` (35 tests; needs Docker, the GPU,
+images `wsp-agent-base:step1` and `wsp-proxy:step3`; creates `wsp-egress` if absent and removes only what it created).
+One module-scoped sandbox is created through `infra.sandbox.create()` (hardened GPU agent, internal network, policy
+proxy on `wsp-egress`); a synthetic test server on `wsp-egress` is exempted from private-destination refusal only by the
+TEST-ONLY `test_allow_ips` flag. Every request is issued from inside the agent as uid 1004. Covered (spec section 4 Tests):
+
+- allowed HTTPS to pypi.org, huggingface.co, github.com (curl, requests, `git ls-remote`);
+- 11 denied MFXR URL forms (GitHub/API/raw/codeload, Figshare article/API/ndownloader, DOI, case/percent/slash variants,
+  jina relay) -> 403, and denied redirect chains;
+- bypass fails: direct TCP, UDP DNS to 8.8.8.8, no DNS resolution (`gethostbyname` fails), host IPs on ports 22/80/2375,
+  docker gateway, egress-bridge neighbours, no gateway on the internal network;
+- proxy refuses private destinations (RFC1918, link-local/metadata, CGNAT, ULA, docker bridge) and after redirects;
+- synthetic hash corpus: raw bytes, re-encoded/resized (pHash), inside a zip, carved from a parquet-like blob, basename
+  text list are blocked with nothing but the 403 text saved; clean image/text allowed; proxy logs hold no basenames/canary;
+- `nvidia-smi` and a CUDA torch matmul in the agent;
+- watcher: pool derivatives (copy, resized) only `info`, pHash 3-6 -> alert (no stop), test-split exact copy -> STOP_REQUEST.json,
+  basenames text -> stop-level finding; watcher log has no hashes/basenames; control/state dirs invisible in the agent;
+- no docker.sock, canary "locked"/credential files, private CA key, host state dirs or secret-looking env in the agent;
+  labels dir holds only labels.csv; the Step 4 topology tests check the exact six bind mounts;
+- GPU watchdog kills an over-cap CUDA process in the live sandbox (sandbox survives); finally no labelled leftovers.
+
+DNS: Docker's embedded DNS on the internal network does not resolve external names (tested at step 2 and in step 6);
+agents depend on the proxy resolving names. Residual risks: see the Limitations lists above (loopback inside the
+agent is NO_PROXY so agent-local services are reachable by design; pHash thresholds uncalibrated and the real L1 corpus
+never exercised; watcher periodic; watchdog polling/PID-reuse; IPv6/non-443 ports not exhaustive; the proxy and agent
+images are tagged `step*` and not digest-pinned in the API; unhashed pip pins; no independent review was performed;
+red-team of tool-level exfiltration channels (e.g. DNS tunnelling via the proxy's allowed domains, slow-drip uploads to
+allowed hosts) is not done).
