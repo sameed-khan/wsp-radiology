@@ -107,6 +107,10 @@ uv run pytest -q
 uv run wsp-arms grid --arm A --jobs 8
 uv run wsp-arms grid --arm C --jobs 8
 uv run wsp-arms sae                         # GPU, once per encoder
+# Additional pool-only layers, in a separate non-private location:
+uv run --extra ml wsp-arms sae --encoders skelex --layers 8 12 20
+# After all training completes, build the agent package (GPU for pool quality):
+uv run --extra ml python -m wsp_arms.sae_package --id phase1
 uv run wsp-arms grid --arm E --jobs 8
 uv run wsp-arms grid --arm B                # GPU, both variants
 uv run wsp-arms pretrain-h --encoder skelex  # repeat medsiglip and dinov3

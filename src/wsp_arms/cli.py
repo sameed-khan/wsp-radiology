@@ -158,6 +158,7 @@ def main(argv=None):
     sp = sub.add_parser('sae', help='arm E: train the per-encoder top-k SAE on pool patch tokens (GPU, once per encoder)')
     sp.add_argument('--encoders', nargs='*', default=None)
     sp.add_argument('--steps', type=int, default=None)
+    sp.add_argument('--layers', nargs='+', type=int, help='train pool-only at these layers into data/agent-sae-training')
     sp.add_argument('--force', action='store_true')
     tb = sub.add_parser('time-b', help='arm B: 50-step timing run per encoder/variant + full-grid GPU-hour estimate')
     tb.add_argument('--encoders', nargs='*', default=None)
@@ -196,7 +197,12 @@ def main(argv=None):
     if args.cmd == 'sae':
         from . import core, sae_train
         for e in (args.encoders or list(core.ENCODERS)):
-            sae_train.train_one(e, steps=args.steps, force=args.force)
+            if args.layers:
+                for layer in args.layers:
+                    out = core.Paths.default().root / 'data/agent-sae-training' / e / f'L{layer}'
+                    sae_train.train_one(e, steps=args.steps, force=args.force, out_dir=out, layer=layer, pool_only=True)
+            else:
+                sae_train.train_one(e, steps=args.steps, force=args.force)
         return 0
     jobs = max(1, min(args.jobs, 8))
     _set_threads(1)
