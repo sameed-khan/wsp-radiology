@@ -60,6 +60,44 @@ def _grid_b(args):
     return 1 if failed else 0
 
 
+def _one_d(task):
+    from . import arm_d
+    arm, enc, k, r, force, partial, steps, micro_batch = task
+    try:
+        arm_d.run(arm, enc, k, r, force=force, allow_partial=partial, steps=steps, micro_batch=micro_batch)
+        return None
+    except Exception as exc:
+        return f'{arm} {enc} k={k} r={r}: {type(exc).__name__}: {exc}'
+
+
+def _grid_d(args):
+    from . import arm_d, core
+    try:
+        _, coverage = arm_d.load_cache(core.Paths.default(), args.allow_partial)
+        print(json.dumps({'cache_coverage': coverage}), flush=True)
+    except Exception as exc:
+        print(f'D cache: {type(exc).__name__}: {exc}', file=sys.stderr)
+        return 1
+    rs = args.rs or ([1] if args.arm == 'D-ft' else core.RS)
+    if args.arm == 'D-ft' and any(r != 1 for r in rs):
+        print('D-ft is restricted to r=1', file=sys.stderr)
+        return 1
+    tasks = [(args.arm, e, str(k), r, args.force, args.allow_partial, args.steps, args.micro_batch)
+             for e in (args.encoders or core.ENCODERS) for k in (args.ks or ('0', *core.KS)) for r in rs]
+    _set_threads(1)
+    if args.arm == 'D-head' and args.jobs > 1:
+        import multiprocessing as mp
+        with mp.get_context('spawn').Pool(min(args.jobs, 8)) as pool:
+            results = list(pool.imap_unordered(_one_d, tasks))
+    else:
+        results = [_one_d(t) for t in tasks]
+    failures = [x for x in results if x]
+    for error in failures:
+        print(error, file=sys.stderr)
+    print(json.dumps({'arm': args.arm, 'runs': len(tasks), 'failed': len(failures)}))
+    return int(bool(failures))
+
+
 def _grid_h(args):
     from . import arm_h, core
     paths = core.Paths.default()
@@ -106,7 +144,7 @@ def main(argv=None):
     p = argparse.ArgumentParser(prog='wsp-arms')
     sub = p.add_subparsers(dest='cmd', required=True)
     g = sub.add_parser('grid', help='run (resumable) all encoders x k x r for an arm')
-    g.add_argument('--arm', required=True, choices=('A', 'C', 'E', 'B', 'B-full', 'B-lora', 'H'))
+    g.add_argument('--arm', required=True, choices=('A', 'C', 'E', 'B', 'B-full', 'B-lora', 'H', 'D-head', 'D-ft'))
     g.add_argument('--variants', nargs='*', default=None, choices=('full', 'lora'), help='arm B variants (default both)')
     g.add_argument('--steps', type=int, default=None, help='arm B: override step count (testing only; recorded)')
     g.add_argument('--micro-batch', type=int, default=None, help='micro-batch (grad accumulation to 16)')
@@ -116,6 +154,7 @@ def main(argv=None):
     g.add_argument('--rs', nargs='*', type=int, default=None)
     g.add_argument('--jobs', type=int, default=8)
     g.add_argument('--force', action='store_true')
+    g.add_argument('--allow-partial', action='store_true', help='D: test-only partial cache; writes separate partial paths')
     sp = sub.add_parser('sae', help='arm E: train the per-encoder top-k SAE on pool patch tokens (GPU, once per encoder)')
     sp.add_argument('--encoders', nargs='*', default=None)
     sp.add_argument('--steps', type=int, default=None)
@@ -141,6 +180,8 @@ def main(argv=None):
         from . import arm_h
         print(json.dumps(arm_h.pretrain(args.encoder, sample_size=args.sample_size, force=args.force, micro_batch=args.micro_batch)))
         return 0
+    if args.cmd == 'grid' and args.arm in ('D-head', 'D-ft'):
+        return _grid_d(args)
     if args.cmd == 'grid' and args.arm == 'H':
         return _grid_h(args)
     if args.cmd == 'label-d':
