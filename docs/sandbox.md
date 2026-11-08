@@ -138,3 +138,27 @@ only `labels.csv`. `pause` freezes the agent only (proxy keeps running). Run the
 Tests: `uv run --extra test pytest -q tests/infra/test_sandbox_step4_docker.py` (needs images `wsp-agent-base:step1`,
 `wsp-proxy:step3`). Limits: GPU watchdog/watcher are not launched by `create` (step 5; `state_dir/sandbox.json` holds the
 `container:cap` argument); the proxy image tag default is `wsp-proxy:step3`.
+
+## Step 5: workspace watcher and GPU watchdog (host processes)
+
+Both run on the trusted host, never inside the sandbox; their state/control dirs must not be mounted into agents.
+
+- `python -m infra.watcher --workspace W --corpus C --state-dir S --control-dir D [--interval 120] [--run-id R] [--once]`
+  scans new/changed regular files (symlinks never followed; mtime/size/inode cache; SIGUSR1 = scan now).
+  It reuses the proxy's scanner (`wsp_content`: sha256, normalized-pixel sha, pHash, JPEG/PNG carving,
+  base64, bounded recursive archives, basenames). **stop** (writes `D/STOP_REQUEST.json`
+  `{reason,file,rule,time}`): archive sha256; exact MFXR image that is not a pool image; pHash <= 2 to a test-split
+  image; >= 3 distinct MFXR basenames. **alert**: pHash 3..6 to a test image; unscannable/oversize (> 2 GiB) content.
+  **info `pool-derivative`**: image matches only pool images (pHash <= 6 to pool, > 6 from test). A file near both a
+  pool and a test image is judged by the test image (conservative). Logs (`S/watcher.jsonl`) hold only relative path,
+  rule, size - never hashes, basenames or content.
+- `python -m infra.gpu_watchdog --state-dir S (--container NAME:CAP_GIB | --sandbox-json S/sandbox.json)`.
+  Kills the largest GPU process of a container that exceeds its cap, as that process's own UID:
+  the sandbox drops all capabilities, so `docker exec -u 0 ... kill` fails with EPERM against UID 1004 processes
+  (observed live). Namespace PID 1 (tini) cannot be signalled from inside; the invariant is that agent work is only
+  ever started with `docker exec` (never PID 1), and a PID-1 over-cap is logged as `kill-failed`.
+
+Limitations: the watcher is periodic (120 s) so a file created and deleted between scans is missed; the pHash
+thresholds are not yet calibrated against the section 8.3 audit; archive/size limits make some content only
+alert-level; the watchdog polls every 5 s (transient overage possible) and PID reuse between check and kill is
+narrowed (identity re-check) but not eliminated. Neither process is started by `sandbox.create`.

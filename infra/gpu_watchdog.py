@@ -29,11 +29,30 @@ def _processes() -> list[tuple[int, int]]:
                   "--format=csv,noheader,nounits")
     processes = []
     for line in output.splitlines():
+        if not line.strip():
+            continue
         parts = line.split(",")
         if len(parts) != 2:
             raise ValueError("unexpected nvidia-smi process output")
-        processes.append((int(parts[0].strip()), int(parts[1].strip())))
+        try:
+            processes.append((int(parts[0].strip()), int(parts[1].strip())))
+        except ValueError:
+            # e.g. "[N/A]" memory: unknown, skip rather than abort the whole poll
+            continue
     return processes
+
+
+def _process_uid(pid: int) -> int:
+    """Real UID of a host PID (0 if unreadable).
+
+    The sandbox drops every capability, so `docker exec -u 0` has no CAP_KILL and
+    cannot signal the agent's UID-1004 processes: the kill must run as the victim's UID.
+    """
+    try:
+        match = re.search(r"^Uid:\s+(\d+)", Path(f"/proc/{pid}/status").read_text(), re.MULTILINE)
+        return int(match.group(1)) if match else 0
+    except (OSError, ValueError):
+        return 0
 
 
 def _utilization() -> dict[int, int]:
@@ -101,7 +120,7 @@ def poll(containers: dict[str, tuple[str, float]], log_path: Path,
                      memory_mib=total, cap_gib=cap_gib, reason="namespace-init")
                 continue
             try:
-                _run("docker", "exec", "-u", "0", name, "kill", "-9", str(nspid))
+                _run("docker", "exec", "-u", str(_process_uid(pid)), name, "kill", "-9", str(nspid))
             except subprocess.CalledProcessError:
                 _log(log_path, event="kill-failed", container=name, pid=pid,
                      memory_mib=total, cap_gib=cap_gib)
@@ -113,8 +132,13 @@ def poll(containers: dict[str, tuple[str, float]], log_path: Path,
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--state-dir", type=Path, required=True)
-    parser.add_argument("--container", action="append", required=True, metavar="NAME:CAP_GIB")
+    parser.add_argument("--container", action="append", default=[], metavar="NAME:CAP_GIB")
+    parser.add_argument("--sandbox-json", type=Path, help="state_dir/sandbox.json written by infra.sandbox.create")
     args = parser.parse_args()
+    if args.sandbox_json:
+        args.container.append(json.loads(args.sandbox_json.read_text())["gpu_watchdog_arg"])
+    if not args.container:
+        parser.error("--container or --sandbox-json required")
     containers = {}
     for value in args.container:
         try:

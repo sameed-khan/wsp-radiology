@@ -11,10 +11,11 @@ def test_poll_kills_only_largest_process_in_over_cap_container(monkeypatch, tmp_
     monkeypatch.setattr(watchdog, "_processes", lambda: [(101, 700), (102, 500), (103, 2000)])
     monkeypatch.setattr(watchdog, "_utilization", lambda: {101: 20, 102: 30})
     monkeypatch.setattr(watchdog, "_container_pid", lambda pid, cid: {101: 3, 102: 2}.get(pid))
+    monkeypatch.setattr(watchdog, "_process_uid", lambda pid: 1004)
     monkeypatch.setattr(watchdog, "_run", lambda *args: calls.append(args))
     log = tmp_path / "gpu.jsonl"
     watchdog.poll({"wsp-run": ("a" * 64, 1)}, log, True)
-    assert calls == [("docker", "exec", "-u", "0", "wsp-run", "kill", "-9", "3")]
+    assert calls == [("docker", "exec", "-u", "1004", "wsp-run", "kill", "-9", "3")]
     events = [json.loads(line) for line in log.read_text().splitlines()]
     assert [e["event"] for e in events] == ["sample", "violation"]
     assert events[0]["memory_mib"] == 1200
