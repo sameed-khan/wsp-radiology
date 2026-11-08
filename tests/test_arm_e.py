@@ -112,7 +112,7 @@ def test_sae_train_smoke(tmp_path, monkeypatch):
         Image.fromarray(rng.integers(0, 255, (64, 80), dtype=np.uint8)).save(paths.root / 'data/pool' / n)
     for n in sorted(p.name for p in paths.test_png_dir().glob('*.png'))[:6]:
         Image.fromarray(rng.integers(0, 255, (64, 80), dtype=np.uint8)).save(paths.test_png_dir() / n)
-    rec = sae_train.train_one(enc, paths=paths, steps=40, limit=6, log=lambda *_: None)
+    rec = sae_train.train_one(enc, paths=paths, steps=300, limit=6, log=lambda *_: None)
     d = sae_train.sae_dir(paths, enc)
     assert rec['layer'] == 16 and rec['dictionary_size'] == 8192 and rec['tokens_per_image'] == 196
     assert np.load(d / 'pool_mean_latents.npy').shape == (6, 8192) and not (d / 'tokens.f16.tmp').exists()
