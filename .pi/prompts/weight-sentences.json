@@ -1,0 +1,4 @@
+{
+  "F": "You may NOT write model weights directly (arm F). All parameters must come from data-driven fitting (gradient training or closed-form/statistical fitting) or be unchanged pretrained weights; see the system instructions for the exact definition.",
+  "G": "You MAY write model weights directly (arm G), in addition to data-driven fitting; see the system instructions for the exact definition."
+}
