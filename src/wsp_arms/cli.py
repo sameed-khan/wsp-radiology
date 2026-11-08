@@ -26,12 +26,66 @@ def _one(args):
         return (arm, enc, k, r, f'FAILED: {type(e).__name__}: {e}', time.monotonic() - t, None)
 
 
+def _grid_b(args):
+    """Sequential (one GPU job at a time), resumable: completed runs (run.json status complete) are skipped."""
+    from . import arm_b, core
+    variants = [args.arm.split('-', 1)[1]] if '-' in args.arm else (args.variants or list(arm_b.VARIANTS))
+    encs = args.encoders or list(core.ENCODERS)
+    ks = [core.parse_k(k) for k in (args.ks or core.KS)]
+    rs = args.rs or list(core.RS)
+    paths = core.Paths.default()
+    tasks = [(f'B-{v}', e, k, r) for v in variants for e in encs for k in ks for r in rs]
+    start = time.monotonic()
+    n_ok = n_skip = 0
+    failed = []
+    for arm, e, k, r in tasks:
+        t = time.monotonic()
+        if not args.force and core.is_complete(paths.run_dir(arm, e, k, r)):
+            n_skip += 1
+            continue
+        try:
+            arm_b.run(arm, e, k, r, paths=paths, force=args.force, steps=args.steps, micro_batch=args.micro_batch)
+            n_ok += 1
+            print(f'{arm} {e} k={k} r={r} ok {time.monotonic() - t:.1f}s', flush=True)
+        except Exception as ex:
+            failed.append((arm, e, k, r, f'{type(ex).__name__}: {ex}'))
+            print(f'{arm} {e} k={k} r={r} FAILED {type(ex).__name__}: {ex}', file=sys.stderr, flush=True)
+            try:
+                import torch
+                torch.cuda.empty_cache()
+            except Exception:
+                pass
+    print(json.dumps({'arm': args.arm, 'runs': len(tasks), 'ok': n_ok, 'skipped_complete': n_skip, 'failed': len(failed),
+                      'wall_seconds': round(time.monotonic() - start, 1)}))
+    return 1 if failed else 0
+
+
+def _time_b(args):
+    from . import arm_b, core
+    paths = core.Paths.default()
+    res = []
+    for e in (args.encoders or list(core.ENCODERS)):
+        for v in args.variants:
+            t = arm_b.time_one(e, v, paths=paths, steps=args.steps, micro_batch=args.micro_batch)
+            print(json.dumps(t), flush=True)
+            res.append(t)
+    est = arm_b.estimate_grid(res, paths=paths)
+    print(json.dumps(est, indent=1))
+    out = args.out or str(paths.private / 'runs/baselines/B-timing.json')
+    core.write_private_atomic(out, json.dumps({'timings': res, 'estimate': est}, indent=1))
+    return 0
+
+
 def main(argv=None):
     os.umask(0o077)
+    os.environ.setdefault('PYTORCH_ALLOC_CONF', 'expandable_segments:True')
     p = argparse.ArgumentParser(prog='wsp-arms')
     sub = p.add_subparsers(dest='cmd', required=True)
     g = sub.add_parser('grid', help='run (resumable) all encoders x k x r for an arm')
-    g.add_argument('--arm', required=True, choices=('A', 'C', 'E'))
+    g.add_argument('--arm', required=True, choices=('A', 'C', 'E', 'B', 'B-full', 'B-lora'))
+    g.add_argument('--variants', nargs='*', default=None, choices=('full', 'lora'), help='arm B variants (default both)')
+    g.add_argument('--steps', type=int, default=None, help='arm B: override step count (testing only; recorded)')
+    g.add_argument('--micro-batch', type=int, default=None, help='arm B: micro-batch (grad accumulation to 16)')
     g.add_argument('--encoders', nargs='*', default=None)
     g.add_argument('--ks', nargs='*', default=None)
     g.add_argument('--rs', nargs='*', type=int, default=None)
@@ -41,7 +95,17 @@ def main(argv=None):
     sp.add_argument('--encoders', nargs='*', default=None)
     sp.add_argument('--steps', type=int, default=None)
     sp.add_argument('--force', action='store_true')
+    tb = sub.add_parser('time-b', help='arm B: 50-step timing run per encoder/variant + full-grid GPU-hour estimate')
+    tb.add_argument('--encoders', nargs='*', default=None)
+    tb.add_argument('--variants', nargs='*', default=['full', 'lora'])
+    tb.add_argument('--steps', type=int, default=50)
+    tb.add_argument('--micro-batch', type=int, default=None)
+    tb.add_argument('--out', default=None)
     args = p.parse_args(argv)
+    if args.cmd == 'time-b':
+        return _time_b(args)
+    if args.cmd == 'grid' and args.arm.startswith('B'):
+        return _grid_b(args)
     if args.cmd == 'sae':
         from . import core, sae_train
         for e in (args.encoders or list(core.ENCODERS)):

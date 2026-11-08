@@ -122,7 +122,7 @@ def fit(model, batches, *, steps, lr=1e-3, weight_decay=0.0, warmup=0.0, param_g
             ctx = torch.autocast(torch.device(device).type, dtype=autocast) if autocast else nullcontext()
             with ctx:
                 logits = forward(model, x.to(device)) if forward else model(x.to(device))
-            loss = nn.functional.cross_entropy(logits.float(), y.to(device).long(), weight=weight) / accumulate
+            loss = nn.functional.cross_entropy(logits.float(), y.to(device).long(), weight=weight, reduction='sum') / (len(y) * accumulate)
             loss.backward()
             total += float(loss.detach())
         if grad_clip:
