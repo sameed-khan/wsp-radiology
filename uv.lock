@@ -1492,6 +1492,8 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "imagehash" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "pillow" },
     { name = "requests" },
 ]
@@ -1511,6 +1513,7 @@ test = [
 requires-dist = [
     { name = "huggingface-hub", marker = "extra == 'models'", specifier = ">=0.26,<2" },
     { name = "imagehash", specifier = ">=4.3,<5" },
+    { name = "numpy", specifier = ">=2,<3" },
     { name = "pillow", specifier = ">=10.4,<13" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8.3,<9" },
     { name = "requests", specifier = ">=2.32,<3" },

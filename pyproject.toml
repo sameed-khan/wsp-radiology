@@ -11,6 +11,7 @@ dependencies = [
   "Pillow>=10.4,<13",
   "ImageHash>=4.3,<5",
   "requests>=2.32,<3",
+  "numpy>=2,<3",
 ]
 
 [project.optional-dependencies]
@@ -20,9 +21,10 @@ test = ["pytest>=8.3,<9"]
 
 [project.scripts]
 wsp-prep = "wsp_prep.cli:main"
+wsp-eval = "wsp_eval.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/wsp_prep"]
+packages = ["src/wsp_prep", "src/wsp_eval"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
