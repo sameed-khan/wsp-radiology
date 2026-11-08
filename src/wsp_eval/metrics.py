@@ -30,16 +30,18 @@ def metrics(y, p, patient, threshold):
 
 def bootstrap(runs, iterations=2000, seed=0, other=None):
     """Runs are (labels, probabilities, patient IDs, threshold) on identical images."""
-    y, _, patient, _ = runs[0]
+    y, _, patient, _ = runs[0][:4]
     patient = np.asarray(patient)
     patients = np.unique(patient)
     if not len(patients):
         raise ValueError('empty dataset')
     for run in runs + (other or []):
-        if not np.array_equal(run[0], y) or not np.array_equal(run[2], patient):
+        if (not np.array_equal(run[0], y) or not np.array_equal(run[2], patient)
+                or (len(run) > 4 and len(runs[0]) > 4 and not np.array_equal(run[4], runs[0][4]))
+                or (len(run) > 4) != (len(runs[0]) > 4)):
             raise ValueError('runs must contain identical ordered images and labels')
     def calc(run, idx=None, ids=None):
-        a, b, c, t = run
+        a, b, c, t = run[:4]
         if idx is None:
             return metrics(a, b, c, t)
         return metrics(np.asarray(a)[idx], np.asarray(b)[idx], ids, t)

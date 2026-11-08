@@ -29,7 +29,7 @@ def save(path, value, private=False):
 def load_run(path):
     obj = json.loads(Path(path).read_text())
     rows = obj['rows']
-    return ([r['label'] for r in rows], [r['prob'] for r in rows], [r['patient_id'] for r in rows], obj['threshold'])
+    return ([r['label'] for r in rows], [r['prob'] for r in rows], [r['patient_id'] for r in rows], obj['threshold'], [r['file'] for r in rows], sum(r.get('missing', False) for r in rows))
 
 
 def score(args):
@@ -66,10 +66,16 @@ def main():
     s = sub.add_parser('score')
     s.add_argument('--preds', required=True); s.add_argument('--threshold', type=float, required=True); s.add_argument('--run-id', required=True); s.add_argument('--out', required=True)
     s.add_argument('--manifest', default=str(MANIFEST)); s.add_argument('--exclude'); s.add_argument('--bootstrap', type=int, default=2000); s.add_argument('--seed', type=int, default=0)
+    i = sub.add_parser('infer', help='run frozen F/G predictor and score it')
+    i.add_argument('--workspace', required=True); i.add_argument('--images', required=True); i.add_argument('--image', required=True); i.add_argument('--run-id', required=True); i.add_argument('--out', required=True)
+    i.add_argument('--manifest', default=str(MANIFEST)); i.add_argument('--exclude'); i.add_argument('--bootstrap', type=int, default=2000); i.add_argument('--seed', type=int, default=0)
     o = sub.add_parser('overlap'); o.add_argument('--external-root', action='append', required=True); o.add_argument('--test-manifest', default=str(MANIFEST)); o.add_argument('--out', required=True); o.add_argument('--workers', type=int, default=12)
     a = sub.add_parser('aggregate'); a.add_argument('--runs', required=True, help='CSV: arm,encoder,k,r,path to private-results.json'); a.add_argument('--out', required=True); a.add_argument('--bootstrap', type=int, default=2000); a.add_argument('--seed', type=int, default=0); a.add_argument('--audit', choices=['pass','fail','unknown'], default='unknown')
     args = p.parse_args()
     if args.command == 'score': score(args)
+    elif args.command == 'infer':
+        from .inference import infer
+        infer(args)
     elif args.command == 'overlap': overlap(args.external_root, private_dir(args.out), args.test_manifest, args.workers)
     else:
         from .aggregate import aggregate

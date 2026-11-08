@@ -17,7 +17,7 @@ dependencies = [
 [project.optional-dependencies]
 models = ["huggingface-hub>=0.26,<2"]
 ml = ["torch>=2.5"]
-test = ["pytest>=8.3,<9"]
+test = ["pytest>=8.3,<9", "scikit-learn>=1.5,<2"]
 
 [project.scripts]
 wsp-prep = "wsp_prep.cli:main"
