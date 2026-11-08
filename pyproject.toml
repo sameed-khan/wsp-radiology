@@ -22,7 +22,7 @@ test = ["pytest>=8.3,<9"]
 wsp-prep = "wsp_prep.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/wsp_prep"]
+packages = ["src/wsp_prep", "infra"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
