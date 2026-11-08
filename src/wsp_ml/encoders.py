@@ -62,13 +62,17 @@ class Adapter:
         return result
 
 
-def load_encoder(name, device, dtype):
+def model_path(name):
+    return Path(os.environ.get('WSP_MODELS', str(ROOT / 'models'))) / MODELS[name]
+
+
+def load_encoder(name, device, dtype, *, path=None):
     if name not in MODELS:
         raise ValueError(name)
     os.environ['HF_HUB_OFFLINE'] = '1'
     from transformers import ViTMAEModel, SiglipVisionModel, DINOv3ViTModel, SiglipConfig
     cls = {'skelex': ViTMAEModel, 'medsiglip': SiglipVisionModel, 'dinov3': DINOv3ViTModel}[name]
-    path = Path(os.environ.get('WSP_MODELS', str(ROOT / 'models'))) / MODELS[name]
+    path = model_path(name) if path is None else Path(path)
     kwargs = {}
     if name == 'medsiglip':
         kwargs['config'] = SiglipConfig.from_pretrained(path, local_files_only=True).vision_config

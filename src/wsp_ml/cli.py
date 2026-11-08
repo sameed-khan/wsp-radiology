@@ -10,7 +10,7 @@ def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser(prog='wsp-ml')
     subs = parser.add_subparsers(dest='command', required=True)
-    for name in ('patient-map', 'sample', 'test-images', 'hash-corpus', 'cuda-smoke'):
+    for name in ('patient-map', 'sample', 'test-images', 'hash-corpus', 'cuda-smoke', 'external-manifests', 'audit-features'):
         subs.add_parser(name)
     features = subs.add_parser('features')
     features.add_argument('--encoder', required=True, choices=('skelex', 'medsiglip', 'dinov3'))
@@ -24,6 +24,12 @@ def main():
     elif args.command == 'cuda-smoke':
         from .features import cuda_smoke
         result = cuda_smoke()
+    elif args.command == 'audit-features':
+        from .features import audit_features
+        result = audit_features()
+    elif args.command == 'external-manifests':
+        from .external import write_manifests
+        result = write_manifests()
     else:
         result = getattr(data, args.command.replace('-', '_'))()
     receipt = {'command': args.command, 'seconds': round(time.monotonic()-start, 3), 'result': result}
