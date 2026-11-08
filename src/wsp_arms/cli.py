@@ -14,10 +14,13 @@ def _set_threads(n):
 
 def _one(args):
     arm, enc, k, r, force = args
-    from . import arms_ac
     t = time.monotonic()
     try:
-        rec = arms_ac.run(arm, enc, k, r, force=force)
+        if arm == 'E':
+            from . import arms_e as mod
+        else:
+            from . import arms_ac as mod
+        rec = mod.run(arm, enc, k, r, force=force)
         return (arm, enc, k, r, 'ok', time.monotonic() - t, rec.get('threshold'))
     except Exception as e:  # reported, not swallowed silently
         return (arm, enc, k, r, f'FAILED: {type(e).__name__}: {e}', time.monotonic() - t, None)
@@ -28,13 +31,22 @@ def main(argv=None):
     p = argparse.ArgumentParser(prog='wsp-arms')
     sub = p.add_subparsers(dest='cmd', required=True)
     g = sub.add_parser('grid', help='run (resumable) all encoders x k x r for an arm')
-    g.add_argument('--arm', required=True, choices=('A', 'C'))
+    g.add_argument('--arm', required=True, choices=('A', 'C', 'E'))
     g.add_argument('--encoders', nargs='*', default=None)
     g.add_argument('--ks', nargs='*', default=None)
     g.add_argument('--rs', nargs='*', type=int, default=None)
     g.add_argument('--jobs', type=int, default=8)
     g.add_argument('--force', action='store_true')
+    sp = sub.add_parser('sae', help='arm E: train the per-encoder top-k SAE on pool patch tokens (GPU, once per encoder)')
+    sp.add_argument('--encoders', nargs='*', default=None)
+    sp.add_argument('--steps', type=int, default=None)
+    sp.add_argument('--force', action='store_true')
     args = p.parse_args(argv)
+    if args.cmd == 'sae':
+        from . import core, sae_train
+        for e in (args.encoders or list(core.ENCODERS)):
+            sae_train.train_one(e, steps=args.steps, force=args.force)
+        return 0
     jobs = max(1, min(args.jobs, 8))
     _set_threads(1)
     from . import core
