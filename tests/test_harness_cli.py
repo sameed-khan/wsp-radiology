@@ -119,7 +119,7 @@ def test_stop_and_intervene_infra_and_status_list(tmp_path):
     assert json.loads(run_cli(tmp_path, 'status', '--run', 'R1').stdout)['phase'] == 'frozen'
 
 
-def test_message_delivery_to_fake_driver(tmp_path):
+def test_message_delivery_to_fake_driver(tmp_path, sae_fixture):
     """Supervisor.deliver_messages claims the file once and steers when the agent is running."""
     from wsp_harness.supervisor import Supervisor
     root = tmp_path

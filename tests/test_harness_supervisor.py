@@ -17,6 +17,11 @@ FIXTURE = Path(__file__).parent / 'fixtures/harness'
 live = pytest.mark.skipif(os.environ.get('WSP_LIVE') != '1', reason='paid live Haiku test')
 
 
+@pytest.fixture(autouse=True)
+def package(sae_fixture):
+    pass
+
+
 def setup(tmp_path, prompt, hours):
     shutil.copytree(FIXTURE / '.pi', tmp_path / '.pi')
     (tmp_path / '.pi/prompts/wsp-launch.md').write_text(prompt)

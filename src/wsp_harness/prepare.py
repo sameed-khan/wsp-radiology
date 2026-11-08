@@ -12,6 +12,7 @@ import uuid
 from .config import digest, load_inputs, render
 from .evidence import sha256
 from .run import REPO, utc
+from .sae import validate_package
 
 DATA_ROOT = Path('/home/skhanxx8/projects/wsp-radiology')
 EXPECTED_POOL = 2993
@@ -64,6 +65,13 @@ def prepare(root: Path, k: int, resample: int, image: str, proxy_image: str, dat
     mtimes = {p.stat().st_mtime_ns for p in pool.iterdir() if p.is_file()}
     check('pool_sanitized', 'locked' not in pool.parts and len(mtimes) == 1, path=str(pool), distinct_mtimes=len(mtimes))
     check('prompt_diff', normalized['F'] == normalized['G'])
+    sae_path = data_root / 'data/agent-sae/current'
+    try:
+        sae_hash = validate_package(sae_path)
+        sae_error = None
+    except ValueError as exc:
+        sae_hash, sae_error = None, str(exc)
+    check('sae_package', sae_hash is not None, path=str(sae_path), manifest_sha256=sae_hash, error=sae_error)
     check('labels', sha256(labels / 'labels.csv') == digest(content), sha256=digest(content), path=str(labels))
     for name, path in [('allocation', source / 'allocation.json'), ('corpus', private / 'hash-corpus.json')]:
         try:

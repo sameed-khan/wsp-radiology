@@ -63,7 +63,7 @@ def _token_batches(adapter, files, layer, batch=16):
         yield t.float()
 
 
-def train_one(enc, paths=None, steps=None, limit=None, force=False, out_dir=None, log=print):
+def train_one(enc, paths=None, steps=None, limit=None, force=False, out_dir=None, log=print, layer=None, pool_only=False):
     import torch
     paths = paths or core.Paths.default()
     tk = _toolkit()
@@ -74,20 +74,24 @@ def train_one(enc, paths=None, steps=None, limit=None, force=False, out_dir=None
         return json.loads((out / 'sae.json').read_text())
     core.private_mkdir(out, None)
     steps = steps or SAE_CFG['steps']
-    torch.cuda.set_per_process_memory_fraction(SAE_CFG['vram_cap_gb'] / 24.0)
+    torch.cuda.set_per_process_memory_fraction(5.8 / 24.0 if pool_only else SAE_CFG['vram_cap_gb'] / 24.0)
     torch.cuda.reset_peak_memory_stats()
     t0 = time.monotonic()
     pool_idx = json.loads((paths.pool_features(enc) / 'index.json').read_text())
     pool_names = pool_idx['filenames'][:limit] if limit else pool_idx['filenames']
-    test_names = sorted(p.name for p in paths.test_png_dir().glob('*.png'))
-    if limit:
-        test_names = test_names[:limit]
-    elif len(test_names) != core.N_TEST:
-        raise ValueError('unexpected number of test PNGs')
-    if not limit and json.loads((paths.test_features(enc) / 'index.json').read_text())['filenames'] != test_names:
-        raise ValueError('test feature index != test png listing')
+    test_names = []
+    if not pool_only:
+        test_names = sorted(p.name for p in paths.test_png_dir().glob('*.png'))
+        if limit:
+            test_names = test_names[:limit]
+        elif len(test_names) != core.N_TEST:
+            raise ValueError('unexpected number of test PNGs')
+        if not limit and json.loads((paths.test_features(enc) / 'index.json').read_text())['filenames'] != test_names:
+            raise ValueError('test feature index != test png listing')
     adapter = load_encoder(enc, 'cuda', torch.float32)
-    layer = target_layer(adapter.num_layers)
+    layer = target_layer(adapter.num_layers) if layer is None else layer
+    if not 1 <= layer <= adapter.num_layers:
+        raise ValueError('layer outside encoder depth')
     D = adapter.hidden_size
     pool_files = [paths.root / 'data/pool' / n for n in pool_names]
     test_files = [paths.test_png_dir() / n for n in test_names]
@@ -183,7 +187,7 @@ def train_one(enc, paths=None, steps=None, limit=None, force=False, out_dir=None
                 se_t += float((model.decoder(a) - x).square().sum())
                 var_t += float(x.square().sum())
                 row_t += 1
-    ev_test = 1 - se_t / var_t
+    ev_test = 1 - se_t / var_t if var_t else None
     peak = torch.cuda.max_memory_allocated()
     mm_del = mm_path
     del mm
@@ -192,7 +196,8 @@ def train_one(enc, paths=None, steps=None, limit=None, force=False, out_dir=None
     # ---- 5. write
     from safetensors.torch import save_file
     core.write_private_atomic(out / 'pool_mean_latents.npy', _npy_bytes(pool_mean))
-    core.write_private_atomic(out / 'test_mean_latents.npy', _npy_bytes(test_mean))
+    if not pool_only:
+        core.write_private_atomic(out / 'test_mean_latents.npy', _npy_bytes(test_mean))
     sd = {k: v.detach().cpu().contiguous() for k, v in model.state_dict().items()}
     tmp = out / 'sae.safetensors.tmp'
     save_file(sd, str(tmp))
@@ -209,7 +214,7 @@ def train_one(enc, paths=None, steps=None, limit=None, force=False, out_dir=None
         'loss_first100_mean': float(ls[:100].mean()), 'loss_last100_mean': float(ls[-100:].mean()),
         'loss_every_500': [float(x) for x in ls[::500]],
         'explained_variance_pool_tokens': ev_pool, 'explained_variance_test_tokens': ev_test,
-        'dead_latent_fraction_pool': dead_pool,
+        'dead_latent_fraction_pool': dead_pool, 'mean_l0_pool': float(freq.sum() / n_pool_tok),
         'peak_gpu_bytes': int(peak), 'timings_sec': {'extract': t_extract, 'train': t_train, 'total': time.monotonic() - t0},
         'model_sha256': pool_idx.get('model_sha256'), 'code': core.code_revision(),
         'sae_sha256': core.sha256_file(out / 'sae.safetensors'),
@@ -218,7 +223,7 @@ def train_one(enc, paths=None, steps=None, limit=None, force=False, out_dir=None
     import shutil
     shutil.rmtree(ckpt_dir, ignore_errors=True)
     core.write_private_atomic(out / 'sae.json', json.dumps(rec, indent=2, sort_keys=True) + '\n')
-    log(f'{enc}: layer {layer} dead={dead_pool:.3f} EV pool={ev_pool:.3f} test={ev_test:.3f} peak={peak/2**30:.2f}GiB train={t_train:.0f}s')
+    log(f'{enc}: layer {layer} dead={dead_pool:.3f} EV pool={ev_pool:.3f} test={ev_test} peak={peak/2**30:.2f}GiB train={t_train:.0f}s')
     return rec
 
 

@@ -15,6 +15,7 @@ import uuid
 
 from .config import digest, load_inputs, pi_argv, render
 from .evidence import sha256
+from .sae import seed_package, validate_package
 
 REPO = Path(__file__).resolve().parents[2]
 IMAGE = 'ubuntu:24.04'
@@ -44,6 +45,13 @@ def create_run(root: Path, arm: str, k: int, labels_dir: Path, pool_dir: Path,
             raise ValueError('arm R requires k=0 and a header-only labels.csv')
         if {p.name for p in labels_dir.iterdir()} != {'labels.csv'}:
             raise ValueError('arm R labels directory must contain only labels.csv')
+    # Worktrees keep large inputs in the main checkout, while isolated roots
+    # can provide their own data directory (including in tests).
+    data_root = root if (root / 'data').is_dir() else Path('/home/skhanxx8/projects/wsp-radiology')
+    sae_source = data_root / 'data/agent-sae/current'
+    sae_present = sae_source.exists()
+    if arm.upper() in ('F', 'G') or sae_present:
+        validate_package(sae_source)
     labels_hash = sha256(labels_dir / 'labels.csv')
     inputs = load_inputs(root, arm, allow_test_model=test_model)
     image_id = subprocess.check_output(['docker', 'image', 'inspect', image, '--format', '{{.Id}}'], text=True).strip()
@@ -64,7 +72,8 @@ def create_run(root: Path, arm: str, k: int, labels_dir: Path, pool_dir: Path,
               'weight_sentence': inputs.weight_sentence, 'n_pool': sum(p.is_file() for p in pool_dir.iterdir())}
     prompt = render(inputs.launch_template, values)
     extensions = {p.name: sha256(p) for p in sorted((REPO / 'harness/pi-ext').iterdir()) if p.is_file()}
-    launch = {'run_id': run_id, 'arm': arm.upper(), 'k': k, 'git_revision': revision,
+    sae_hash = seed_package(sae_source, run / 'workspace/provided/sae') if sae_present else None
+    launch = {'sae_manifest_sha256': sae_hash, 'run_id': run_id, 'arm': arm.upper(), 'k': k, 'git_revision': revision,
               'input_hashes': inputs.hashes, 'extension_hashes': extensions,
               'model': inputs.model, 'subagent_model': 'anthropic/claude-haiku-5-5',
               'labels_sha256': labels_hash, 'labels_dir': str(labels_dir), 'pool_dir': str(pool_dir),

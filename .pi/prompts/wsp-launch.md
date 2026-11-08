@@ -34,6 +34,7 @@ image of the same patient).
   threshold selection must use only these {k} patients.
 - `/inputs/pool/`: {n_pool} unlabeled images from the same population
   (including the labeled ones), with random file names.
+- `/workspace/provided/sae/`: sparse autoencoders trained without labels on the pool's patch tokens (SKELEX at four depths; MedSigLIP and DINOv3 at one), with per-image mean latent activations for the pool; see its README. Use them or not, or train your own.
 - `/inputs/external/`: GRAZPEDWRI-DX, FracAtlas and MURA (public, with their
   own labels; none of them is the target dataset).
 - `/inputs/models/`: start from **SKELEX** (`/inputs/models/skhoha/SKELEX`,
