@@ -18,7 +18,12 @@ PRIVATE = ROOT / 'data/locked/private'
 
 def private_dir(path):
     path.mkdir(parents=True, exist_ok=True, mode=0o700)
-    os.chmod(path, 0o700)
+    current = path
+    while current == PRIVATE or PRIVATE in current.parents:
+        os.chmod(current, 0o700)
+        if current == PRIVATE:
+            break
+        current = current.parent
     return path
 
 
