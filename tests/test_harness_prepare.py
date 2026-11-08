@@ -1,3 +1,4 @@
+import os
 import json
 import shutil
 from pathlib import Path
@@ -14,9 +15,11 @@ def fixture_data(tmp_path, monkeypatch):
     (alloc / 'labels.csv').write_text('image,patient,label\na,p,0\n')
     (alloc / 'allocation.json').write_text('{}')
     (data / 'data/locked/private/hash-corpus.json').write_text('{}')
-    pool = data / 'data/pool'
-    pool.mkdir()
+    pool = data / 'data/agent-pool/gen-sanitized'
+    pool.mkdir(parents=True)
     (pool / 'a').touch()
+    os.utime(pool / 'a', (1767225600, 1767225600))
+    (data / 'data/agent-pool/current').symlink_to('gen-sanitized')
     (data / 'models').mkdir()
     (data / 'data/external/extracted').mkdir(parents=True)
     root = tmp_path / 'repo'
@@ -57,9 +60,10 @@ def test_preparation_private_and_only_expected_prompt_diff(tmp_path, monkeypatch
 def test_failed_checks_and_invalid_arguments(tmp_path, monkeypatch):
     root, data = fixture_data(tmp_path, monkeypatch)
     monkeypatch.setattr(mod, '_command', lambda argv: None)
-    (data / 'data/pool/b').touch()
+    (data / 'data/agent-pool/current/b').touch()
     path, report, _ = mod.prepare(root, 10, 1, 'agent', 'proxy', data)
     assert not report['ready']
+    assert not report['checks']['pool_sanitized']['ok']
     for name in ('git_clean', 'n_pool', 'agent_image', 'proxy_image', 'gpu_free', 'no_running_agents', 'anthropic_auth'):
         assert not report['checks'][name]['ok']
     with pytest.raises(ValueError):

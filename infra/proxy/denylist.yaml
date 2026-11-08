@@ -1,5 +1,35 @@
 {
-  "relay_domains": ["r.jina.ai", "s.jina.ai", "archive.org", "webcache.googleusercontent.com", "translate.google.com", "translate.googleusercontent.com", "12ft.io", "firecrawl.dev"],
-  "relay_paths": {"api.tavily.com": ["/extract"]},
-  "repo_domains": ["github.com", "api.github.com", "raw.githubusercontent.com", "codeload.github.com", "objects.githubusercontent.com", "gist.github.com", "gist.githubusercontent.com", "cdn.jsdelivr.net", "fastly.jsdelivr.net", "testingcf.jsdelivr.net", "statically.io", "raw.githack.com", "rawcdn.githack.com"]
+  "relay_domains": [
+    "r.jina.ai",
+    "s.jina.ai",
+    "archive.org",
+    "webcache.googleusercontent.com",
+    "translate.google.com",
+    "translate.googleusercontent.com",
+    "12ft.io",
+    "firecrawl.dev"
+  ],
+  "relay_paths": {
+    "api.tavily.com": [
+      "/extract"
+    ]
+  },
+  "repo_domains": [
+    "github.com",
+    "api.github.com",
+    "raw.githubusercontent.com",
+    "codeload.github.com",
+    "objects.githubusercontent.com",
+    "gist.github.com",
+    "gist.githubusercontent.com",
+    "cdn.jsdelivr.net",
+    "fastly.jsdelivr.net",
+    "testingcf.jsdelivr.net",
+    "statically.io",
+    "raw.githack.com",
+    "rawcdn.githack.com"
+  ],
+  "mfxr_derived_repos": [
+    "surajbi2/birs-radiograph-adaptation"
+  ]
 }

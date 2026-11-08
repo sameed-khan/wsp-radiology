@@ -306,3 +306,13 @@ def test_test_mode_exemption_requires_both_flags(monkeypatch):
     assert not wp.ip_refused("10.9.9.9")
     assert wp.ip_refused("10.9.9.8")
     assert wp.ip_refused("127.0.0.1")
+
+
+def test_mfxr_derived_repository_denied_on_any_host():
+    from infra.proxy.wsp_policy import load_rules, url_rule
+    rules = load_rules()
+    for url in ("https://github.com/surajbi2/birs-radiograph-adaptation",
+                "https://raw.githubusercontent.com/surajbi2/birs-radiograph-adaptation/main/x.csv",
+                "https://api.github.com/repos/surajbi2/birs-radiograph-adaptation/contents"):
+        assert url_rule(url, rules) == "mfxr-derived-repository"
+    assert url_rule("https://github.com/surajbi2", rules) is None

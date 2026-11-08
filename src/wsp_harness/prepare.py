@@ -31,7 +31,8 @@ def prepare(root: Path, k: int, resample: int, image: str, proxy_image: str, dat
     root, data_root = root.resolve(), data_root.resolve()
     private = data_root / 'data/locked/private'
     source = private / f'allocations/k{k}/r{resample}'
-    pool = (data_root / 'data/pool').resolve()
+    # Agents get the sanitized copy (random copy order, constant timestamps); see scripts/sanitize_agent_pool.py.
+    pool = (data_root / 'data/agent-pool/current').resolve()
     n_pool = sum(p.is_file() for p in pool.iterdir())
     inputs = {arm: load_inputs(root, arm) for arm in ('F', 'G')}
     now = datetime.now(timezone.utc)
@@ -60,6 +61,8 @@ def prepare(root: Path, k: int, resample: int, image: str, proxy_image: str, dat
     rev = _command(['git', '-C', str(REPO), 'rev-parse', 'HEAD'])
     check('git_clean', status == '' and bool(rev), revision=rev)
     check('n_pool', n_pool == EXPECTED_POOL, actual=n_pool, expected=EXPECTED_POOL, path=str(pool))
+    mtimes = {p.stat().st_mtime_ns for p in pool.iterdir() if p.is_file()}
+    check('pool_sanitized', 'locked' not in pool.parts and len(mtimes) == 1, path=str(pool), distinct_mtimes=len(mtimes))
     check('prompt_diff', normalized['F'] == normalized['G'])
     check('labels', sha256(labels / 'labels.csv') == digest(content), sha256=digest(content), path=str(labels))
     for name, path in [('allocation', source / 'allocation.json'), ('corpus', private / 'hash-corpus.json')]:

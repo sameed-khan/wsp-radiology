@@ -86,6 +86,9 @@ def url_rule(url, rules):
     if MFXR_REPO in full:
         # Any host: direct, mirror, or a relay embedding the URL in its path.
         return "mfxr-repository"
+    if any(repo in full for repo in rules.get("mfxr_derived_repos", [])):
+        # Third-party repositories built from MFXR (found by pre-launch validation).
+        return "mfxr-derived-repository"
     return None
 
 
