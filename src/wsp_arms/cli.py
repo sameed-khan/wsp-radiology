@@ -60,6 +60,30 @@ def _grid_b(args):
     return 1 if failed else 0
 
 
+def _grid_h(args):
+    from . import arm_h, core
+    paths = core.Paths.default()
+    tasks = [(e, str(k), r) for e in (args.encoders or core.ENCODERS)
+             for k in (args.ks or ('0', *core.KS)) for r in (args.rs or core.RS)]
+    failed = skipped = 0
+    for enc, k, r in tasks:
+        out = paths.run_dir('H', enc, k, r) if args.sample_size == 40000 else paths.run_dir('H-validation', enc, k, r)
+        if not args.force and core.is_complete(out):
+            existing = json.loads((out / 'run.json').read_text())
+            if existing.get('transfer_sample_size') == args.sample_size:
+                skipped += 1
+                continue
+        try:
+            arm_h.run(enc, k, r, paths=paths, force=args.force, sample_size=args.sample_size,
+                      steps=args.steps, micro_batch=args.micro_batch)
+            print(f'H {enc} k={k} r={r} ok', flush=True)
+        except Exception as exc:
+            failed += 1
+            print(f'H {enc} k={k} r={r} FAILED {type(exc).__name__}: {exc}', file=sys.stderr, flush=True)
+    print(json.dumps({'arm': 'H', 'runs': len(tasks), 'skipped_complete': skipped, 'failed': failed}))
+    return int(failed > 0)
+
+
 def _time_b(args):
     from . import arm_b, core
     paths = core.Paths.default()
@@ -82,10 +106,11 @@ def main(argv=None):
     p = argparse.ArgumentParser(prog='wsp-arms')
     sub = p.add_subparsers(dest='cmd', required=True)
     g = sub.add_parser('grid', help='run (resumable) all encoders x k x r for an arm')
-    g.add_argument('--arm', required=True, choices=('A', 'C', 'E', 'B', 'B-full', 'B-lora'))
+    g.add_argument('--arm', required=True, choices=('A', 'C', 'E', 'B', 'B-full', 'B-lora', 'H'))
     g.add_argument('--variants', nargs='*', default=None, choices=('full', 'lora'), help='arm B variants (default both)')
     g.add_argument('--steps', type=int, default=None, help='arm B: override step count (testing only; recorded)')
-    g.add_argument('--micro-batch', type=int, default=None, help='arm B: micro-batch (grad accumulation to 16)')
+    g.add_argument('--micro-batch', type=int, default=None, help='micro-batch (grad accumulation to 16)')
+    g.add_argument('--sample-size', type=int, default=40000, help='H validation checkpoint size (default 40000)')
     g.add_argument('--encoders', nargs='*', default=None)
     g.add_argument('--ks', nargs='*', default=None)
     g.add_argument('--rs', nargs='*', type=int, default=None)
@@ -101,12 +126,23 @@ def main(argv=None):
     tb.add_argument('--steps', type=int, default=50)
     tb.add_argument('--micro-batch', type=int, default=None)
     tb.add_argument('--out', default=None)
+    hp = sub.add_parser('pretrain-h', help='arm H: pretrain transfer checkpoint on external manifests')
+    hp.add_argument('--encoder', required=True, choices=('skelex', 'medsiglip', 'dinov3'))
+    hp.add_argument('--sample-size', type=int, default=40000, help='smaller sample for validation only')
+    hp.add_argument('--micro-batch', type=int, default=None)
+    hp.add_argument('--force', action='store_true')
     dl = sub.add_parser('label-d', help='arm D: annotate pool images with Opus; resumable private cache')
     dl.add_argument('--limit', type=int, default=None, help='only first N pool images (validation)')
     dl.add_argument('--workers', type=int, default=6)
     dl.add_argument('--retries', type=int, default=3)
     dl.add_argument('--timeout', type=int, default=180)
     args = p.parse_args(argv)
+    if args.cmd == 'pretrain-h':
+        from . import arm_h
+        print(json.dumps(arm_h.pretrain(args.encoder, sample_size=args.sample_size, force=args.force, micro_batch=args.micro_batch)))
+        return 0
+    if args.cmd == 'grid' and args.arm == 'H':
+        return _grid_h(args)
     if args.cmd == 'label-d':
         from . import arm_d_labels
         result = arm_d_labels.run(limit=args.limit, workers=args.workers, retries=args.retries, timeout=args.timeout)
