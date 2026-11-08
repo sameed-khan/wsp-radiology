@@ -9,9 +9,9 @@ At the deadline your container is frozen; whatever is in
 Build the best possible image classifier for **Monteggia fracture** on
 pediatric forearm radiographs: given one radiograph, output the probability
 that the patient has a Monteggia fracture-dislocation (fracture of the ulna
-with dislocation of the radial head). The score is the area under the ROC
-curve (AUROC) on a hidden test set of patients from the same hospital
-(about 1,600 images). Sensitivity and
+with dislocation of the radial head). The score is image-level area under the
+ROC curve (AUROC) on a hidden, patient-disjoint test set from the same
+hospital (about 1,600 images). Sensitivity and
 specificity at your chosen threshold and calibration (Brier score, ECE) are
 reported as secondary results.
 
@@ -28,8 +28,10 @@ image of the same patient).
 
 - `/inputs/labels/labels.csv`: the expert labels you are given: all images
   of **{k} randomly sampled patients** (`label` 1 = Monteggia, 0 = control;
-  `patient` groups images of the same patient). These are the only target
-  labels you may use. Any validation must come from these patients.
+  `patient` groups images of the same patient). These are your only externally
+  supplied expert target labels. Image-derived labels produced by you or
+  your helpers are permitted under the system rules. Validation and
+  threshold selection must use only these {k} patients.
 - `/inputs/pool/`: {n_pool} unlabeled images from the same population
   (including the labeled ones), with random file names.
 - `/inputs/external/`: GRAZPEDWRI-DX, FracAtlas and MURA (public, with their
@@ -61,13 +63,16 @@ stop the session.
 
 1. `model/predict.py`: `python /workspace/output/model/predict.py --images DIR
    --out preds.csv` writes `image,prob` for every image file in DIR
-   (`image` = file name, `prob` in [0, 1]). It will run later in this same
+   (`image` = unchanged file name, `prob` a finite number in [0, 1]),
+   exactly one row per input image. It will run later in this same
    container image with **no network access**, the GPU under the same 11 GiB
    cap, a 3-hour limit, `/workspace` mounted read-only at the same path, and
-   the same `/inputs/models` mount. Everything it needs must be under
+   the same `/inputs/models` mount. Write only to the requested output path
+   or `/tmp`. Everything it needs must be under
    `/workspace` or `/inputs/models`. Test it on pool images.
 2. `model/threshold.json`: `{"threshold": t, "method": "..."}` — the decision
-   threshold on `prob`, chosen using only your labeled patients.
+   threshold on `prob` (predict positive when `prob >= threshold`), chosen
+   using only your labeled patients.
 3. `REPORT.md`: what you did and why, what worked and what did not, external
    data/models used, number of target images you or helpers inspected and
    how resulting labels were used, and a description of how the final

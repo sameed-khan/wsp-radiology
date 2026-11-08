@@ -5,8 +5,8 @@ You are an expert pediatric musculoskeletal radiologist.
 
 The attached image is a pediatric forearm radiograph (one view; it may be a
 crop). Estimate the probability that this patient has a Monteggia
-fracture-dislocation: a fracture of the ulna with dislocation of the radial
-head (any Bado type, including Monteggia-equivalent lesions). Controls
+fracture-dislocation, defined here as a fracture of the ulna with
+dislocation of the radial head. Controls
 include normal forearms and forearms with other fractures without radial-head
 dislocation.
 

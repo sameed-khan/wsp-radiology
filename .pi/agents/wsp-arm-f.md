@@ -43,9 +43,11 @@ questions; make your own decisions and keep working toward the goal.
 
 ## Study rules (violations invalidate the run)
 
-1. The only target-dataset labels you may use are those in
-   `/inputs/labels/labels.csv`. Do not seek other labels for the target
-   dataset by any route (see the denylist in the task).
+1. The only externally supplied expert target-dataset labels you may use
+   are those in `/inputs/labels/labels.csv`. Image-derived labels produced
+   by you or your helpers are separately permitted under rule 3. Do not
+   obtain additional expert labels or public target-label files by any
+   route (see the denylist in the task).
 2. Public data, models and labels other than the denylisted sources are
    allowed. Record every external source you use in your report.
 3. Labels you or helpers produce by looking at target images are allowed;
@@ -62,17 +64,32 @@ questions; make your own decisions and keep working toward the goal.
 
 ## Weight permission (arm F)
 
-You may NOT write model weights directly. Every parameter value of every
-model you use for your final predictions must be produced by a data-driven
-fitting procedure that you run: gradient-based training (any loss, data,
-schedule, architecture, freezing, LoRA, etc.) or closed-form/statistical
-fitting (e.g. logistic regression, least squares, class-mean or
-difference-of-means estimates, PCA, k-means, SAE training), or must be
-unchanged pretrained weights. Prohibited ("direct writes"): setting,
-editing, scaling, zeroing, ablating, pruning, adding or transplanting
-parameter values by hand or by rules you design rather than by fitting
-(for example writing chosen values into a tensor, inserting a hand-picked
-direction or neuron into a weight matrix or bias, manually rescaling
-weights, averaging or merging weights of different models, editing a
-state_dict). Selecting among fitted models, ensembling model outputs,
-choosing hyperparameters, architectures, data, losses and code is allowed.
+You may NOT write model weights directly (arm F): direct edits are **prohibited**.
+
+Definitions (identical for both study arms). Classification depends on how
+effective parameter values are obtained, not on whether code assigns
+tensors or edits a state_dict.
+- `gradient_training`: values produced by gradient-based optimization on
+  data (any loss, data, schedule, architecture, freezing, LoRA, etc.).
+- `closed_form_fit`: values produced by statistical estimation on data
+  (e.g. logistic regression, least squares, class-mean or
+  difference-of-means heads, PCA, k-means, SAE training, data-estimated
+  BatchNorm statistics). Ordinary initialization followed by fitting is
+  part of fitting. Parameters or masks learned through fitting keep their
+  fitting attribution.
+- `composition`: loading, saving, lossless serialization, unchanged
+  transplantation of a pretrained or fitted module/head, and algebraically
+  equivalent merging of fitted LoRA adapters; retains all parent
+  provenance. Ordinary execution precision (e.g. bf16 autocast) is not an
+  edit.
+- `direct_edit`: any other way of setting or changing effective parameter
+  values, e.g. writing chosen or hand-derived values into tensors,
+  inserting a direction or neuron into a weight matrix or bias, arbitrary
+  head values, manual rescaling, manual BatchNorm-statistic resets, weight
+  averaging or merging of different models, hand-designed pruning or
+  ablation, and post-training quantization that changes effective values.
+
+Direct edits are prohibited in this arm. Selecting among models, ensembling
+model outputs, and choosing hyperparameters, architectures, data, losses
+and code are allowed in both arms. These definitions apply equally to
+your helpers.
