@@ -136,3 +136,15 @@ the plan's required network controls, red team, label isolation or audit.
   investigator, implementation resumes on OpenAI models (GPT-6.1-Terra),
   Opus 5.5 remains the F/G agent model, and all non-F/G arms are completed
   before F/G launch.
+
+## ADR-004: Precomputed label-free SAEs provided to F and G
+
+**Status:** accepted by the investigator, 2026-11-08.
+
+To keep the 24-hour F/G windows focused on the manipulated variable rather than on
+tooling setup, both arms receive the same precomputed sparse autoencoders, trained
+without labels on pool patch tokens with the arm E recipe: SKELEX at layers 8/12/16/20
+and MedSigLIP/DINOv3 at their 2/3-depth layer, with pool mean latent activations and
+quality statistics. No test-set data are included. The launch prompt gains one
+identical sentence; agents may ignore them or train their own. This slightly steers
+both arms toward SAE-based workflows (plan §7.3 already lists SAE tooling).
