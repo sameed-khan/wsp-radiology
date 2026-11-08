@@ -101,7 +101,17 @@ def main(argv=None):
     tb.add_argument('--steps', type=int, default=50)
     tb.add_argument('--micro-batch', type=int, default=None)
     tb.add_argument('--out', default=None)
+    dl = sub.add_parser('label-d', help='arm D: annotate pool images with Opus; resumable private cache')
+    dl.add_argument('--limit', type=int, default=None, help='only first N pool images (validation)')
+    dl.add_argument('--workers', type=int, default=6)
+    dl.add_argument('--retries', type=int, default=3)
+    dl.add_argument('--timeout', type=int, default=180)
     args = p.parse_args(argv)
+    if args.cmd == 'label-d':
+        from . import arm_d_labels
+        result = arm_d_labels.run(limit=args.limit, workers=args.workers, retries=args.retries, timeout=args.timeout)
+        print(json.dumps(result))
+        return 1 if result['failed'] else 0
     if args.cmd == 'time-b':
         return _time_b(args)
     if args.cmd == 'grid' and args.arm.startswith('B'):
