@@ -24,4 +24,12 @@ def create(run: Path) -> str:
 def destroy(container: str) -> None:
     if not container.startswith('wsp-agent-'):
         raise ValueError('refusing to remove non-agent container')
-    subprocess.run(['docker', 'rm', '-f', container], check=True, capture_output=True)
+    subprocess.run(['docker', 'rm', '-f', container], check=False, capture_output=True)
+
+
+def pause(container: str) -> None:
+    subprocess.run(['docker', 'pause', container], check=True, capture_output=True)
+
+
+def unpause(container: str) -> None:
+    subprocess.run(['docker', 'unpause', container], check=True, capture_output=True)

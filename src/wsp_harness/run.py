@@ -70,14 +70,14 @@ def create_run(root: Path, arm: str, k: int, labels_dir: Path, pool_dir: Path,
 
 class RpcDriver:
     """RPC stdout is recorded byte-for-byte; timestamps are in a parallel JSONL."""
-    def __init__(self, run: Path, inputs, container: str, repo: Path = REPO):
+    def __init__(self, run: Path, inputs, container: str, repo: Path = REPO, extra_args=()):
         self.run = Path(run).resolve()
         launch = json.loads((self.run / 'launch.json').read_text())
         env = {key: os.environ[key] for key in HOST_ENV if key in os.environ}
         env.update(WSP_CONTAINER=container, WSP_EXEC_USER='1004:1004',
                    WSP_RECORDER_DIR=str(self.run / 'recorder'),
                    WSP_DEADLINE_EPOCH=str(launch['deadline_epoch']))
-        self.process = subprocess.Popen(pi_argv(inputs, repo, self.run / 'recorder'),
+        self.process = subprocess.Popen([*pi_argv(inputs, repo, self.run / 'recorder'), *extra_args],
                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                         stderr=(self.run / 'recorder/pi-stderr.log').open('ab'),
                                         env=env, cwd=repo, start_new_session=True)
