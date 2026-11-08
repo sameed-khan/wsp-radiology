@@ -115,3 +115,20 @@ the plan's required network controls, red team, label isolation or audit.
   session records (parent + subagents), reported as list-price estimates
   (`totalFromProvider: false`; access is subscription OAuth), with the price
   table archived.
+
+## ADR-003: Anthropic implementation models after OpenAI usage limit
+
+**Status:** accepted by the investigator, 2026-11-08.
+
+- After the OpenAI subscription usage limit stopped GPT-6.1-Terra/Sol lanes,
+  remaining implementation is done by Claude Sonnet 5.5 (medium effort)
+  subagents; simple code, execution and long-running jobs by Claude Haiku 5.5
+  (high effort). Independent code review is waived for the remaining work
+  by investigator decision; this must be reported as a limitation. Code
+  written before the switch keeps its recorded Sol review status (L1, L4e
+  reviewed with fixes pending/applied; L2/L3 partial, unreviewed).
+- The investigator accepts the risk that Anthropic subscription usage limits
+  may interrupt F/G sessions; such stalls are logged as infrastructure
+  interruptions and handled identically for F and G.
+- Work proceeds up to launch readiness; F/G launch requires the
+  investigator's explicit go-ahead.
