@@ -1,0 +1,16 @@
+{
+  "dataset": "MURA",
+  "version": "1.1",
+  "official_landing_page": "https://stanfordmlgroup.github.io/competitions/mura/",
+  "current_landing_page": "https://stanford.redivis.com/datasets/cv1a-apytk3j44",
+  "archive_url": "https://cs.stanford.edu/group/mlgroup/MURA-v1.1.zip",
+  "archive_bytes": 3380245855,
+  "observed_sha256": "c703aecceaf472ea9d38510c53a719323525418dd5ef427c05e52add0cfae198",
+  "checksum_basis": "Locally observed SHA-256 over TLS; no independent publisher checksum found",
+  "archive_path": "data/external/downloads/MURA/MURA-v1.1.zip",
+  "extracted_path": "data/external/extracted/MURA/MURA-v1.1",
+  "image_counts": {"train": 36812, "valid": 3197},
+  "terms_status": "Investigator confirmed research use is permitted on 2026-11-08; archive contains no terms document. No additional third-party API permission is inferred.",
+  "storage_policy": "Public source archive and images remain locally ignored, not DVC",
+  "acquisition_cli_support": "Direct official download documented here; wsp-prep download-external currently handles Figshare sources only"
+}

@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wsp-radiology-preparation"
+version = "0.1.0"
+description = "Reproducible Phase-1 data and model acquisition tooling"
+requires-python = ">=3.11"
+dependencies = [
+  "Pillow>=10.4,<13",
+  "ImageHash>=4.3,<5",
+  "requests>=2.32,<3",
+]
+
+[project.optional-dependencies]
+models = ["huggingface-hub>=0.26,<2"]
+ml = ["torch>=2.5"]
+test = ["pytest>=8.3,<9"]
+
+[project.scripts]
+wsp-prep = "wsp_prep.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wsp_prep"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

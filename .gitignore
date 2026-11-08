@@ -1,0 +1,21 @@
+# Public source data and base weights: reproducible downloads, never DVC.
+/data/
+/models/
+/features/
+/.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+# Private runtime state and credentials; archive selected outputs under artifacts/.
+/.pi/subagents/
+/.runtime/
+/.env
+/artifact-staging/
+/artifacts/**
+!/artifacts/.gitkeep
+# DVC pointer files are versioned.
+!/artifacts/*.dvc
+!/artifacts/.gitignore
+# agent folder contains temporary handoffs and other housekeeping
+agent/

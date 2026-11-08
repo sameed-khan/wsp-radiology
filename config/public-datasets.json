@@ -1,0 +1,28 @@
+{
+  "datasets": [
+    {
+      "name": "GRAZPEDWRI-DX",
+      "article_id": 14825193,
+      "version": 2,
+      "license": "CC BY 4.0",
+      "files": [
+        {"id": 35026432, "name": "dataset.csv", "md5": "f2e996300443654faa62983b7ef1b4c1"},
+        {"id": 34268819, "name": "folder_structure.zip", "md5": "e484b434286428750e9c838a7ed6ada7", "bytes": 26304897},
+        {"id": 34268828, "name": "images_part1.zip", "md5": "964fae38f2f2b6657463922838ddec0e", "bytes": 4046496654},
+        {"id": 34268849, "name": "images_part2.zip", "md5": "4c0e859f24166584bbb34800040d9b71", "bytes": 4122307169},
+        {"id": 34268864, "name": "images_part3.zip", "md5": "9c61c1acc2930d414d1e8141e265b01e", "bytes": 3851047067},
+        {"id": 34268891, "name": "images_part4.zip", "md5": "d35abc668fcec0b5805048760fe448de", "bytes": 4207646096}
+      ]
+    },
+    {
+      "name": "FracAtlas",
+      "article_id": 22363012,
+      "version": 7,
+      "license": "CC BY 4.0",
+      "files": [
+        {"id": 65518038, "name": "FracAtlas.zip", "md5": "fe9da2c7c285915ebee69dfdab8fd396", "bytes": 338436460}
+      ]
+    }
+  ],
+  "note": "External source data and labels remain ignored under data/ and are never DVC-tracked."
+}

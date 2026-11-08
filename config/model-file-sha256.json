@@ -1,0 +1,142 @@
+[
+  {
+    "repo": "skhoha/SKELEX",
+    "revision": "368cae7b05cf649e6dbcddae9a7f00ea4b14bb8e",
+    "path": "models/skhoha/SKELEX/.gitattributes",
+    "bytes": 1519,
+    "sha256": "11ad7efa24975ee4b0c3c3a38ed18737f0658a5f75a0a96787b576a78a023361"
+  },
+  {
+    "repo": "skhoha/SKELEX",
+    "revision": "368cae7b05cf649e6dbcddae9a7f00ea4b14bb8e",
+    "path": "models/skhoha/SKELEX/README.md",
+    "bytes": 33,
+    "sha256": "3f8c1a8fbdc9cb10aaf2a70498ccae1048a2dd604270bca252ab020d2d97b822"
+  },
+  {
+    "repo": "skhoha/SKELEX",
+    "revision": "368cae7b05cf649e6dbcddae9a7f00ea4b14bb8e",
+    "path": "models/skhoha/SKELEX/config.json",
+    "bytes": 699,
+    "sha256": "b48411f4313c2ee6357586b57d185befac8c7c77cc475bc2188ec4487b1bc6f7"
+  },
+  {
+    "repo": "skhoha/SKELEX",
+    "revision": "368cae7b05cf649e6dbcddae9a7f00ea4b14bb8e",
+    "path": "models/skhoha/SKELEX/model.safetensors",
+    "bytes": 1318230232,
+    "sha256": "81cd6e9cf8da0c56d149a2e1a3668fdc6def2742b055f2696f97507332d69ef8"
+  },
+  {
+    "repo": "skhoha/SKELEX",
+    "revision": "368cae7b05cf649e6dbcddae9a7f00ea4b14bb8e",
+    "path": "models/skhoha/SKELEX/preprocessor_config.json",
+    "bytes": 217,
+    "sha256": "a250969c94afba52d785a0e08dd36e13aeda97c4dd2b7fd0d24b457288536cea"
+  },
+  {
+    "repo": "google/medsiglip-448",
+    "revision": "9cea28a1a1195f665105faa6e8544c112fd960a4",
+    "path": "models/google/medsiglip-448/.gitattributes",
+    "bytes": 1519,
+    "sha256": "11ad7efa24975ee4b0c3c3a38ed18737f0658a5f75a0a96787b576a78a023361"
+  },
+  {
+    "repo": "google/medsiglip-448",
+    "revision": "9cea28a1a1195f665105faa6e8544c112fd960a4",
+    "path": "models/google/medsiglip-448/README.md",
+    "bytes": 21416,
+    "sha256": "ec00cf7f333526d3e4fbc118a8fa8b484f9e2e55c2576943f558d59f0130d2ae"
+  },
+  {
+    "repo": "google/medsiglip-448",
+    "revision": "9cea28a1a1195f665105faa6e8544c112fd960a4",
+    "path": "models/google/medsiglip-448/config.json",
+    "bytes": 879,
+    "sha256": "a79c4b99ca743df7cdaf2e563ca0955ba63ec5390f591002c84b76865026b263"
+  },
+  {
+    "repo": "google/medsiglip-448",
+    "revision": "9cea28a1a1195f665105faa6e8544c112fd960a4",
+    "path": "models/google/medsiglip-448/model.safetensors",
+    "bytes": 3513309984,
+    "sha256": "3e1722b8100cca8b87cfe16e42140737aa6d312854e9e6bc24dff6db70e21d72"
+  },
+  {
+    "repo": "google/medsiglip-448",
+    "revision": "9cea28a1a1195f665105faa6e8544c112fd960a4",
+    "path": "models/google/medsiglip-448/preprocessor_config.json",
+    "bytes": 360,
+    "sha256": "32adf33cc0bb18943c735d834c3892fc139a8fa969f4b6d1fc190200bf2392a3"
+  },
+  {
+    "repo": "google/medsiglip-448",
+    "revision": "9cea28a1a1195f665105faa6e8544c112fd960a4",
+    "path": "models/google/medsiglip-448/special_tokens_map.json",
+    "bytes": 455,
+    "sha256": "a6338a0e6dd2aa1c7557b4e85cd7861910086895c6c50b7b4e03186d27fec752"
+  },
+  {
+    "repo": "google/medsiglip-448",
+    "revision": "9cea28a1a1195f665105faa6e8544c112fd960a4",
+    "path": "models/google/medsiglip-448/spiece.model",
+    "bytes": 798330,
+    "sha256": "1e5036bed065526c3c212dfbe288752391797c4bb1a284aa18c9a0b23fcaf8ec"
+  },
+  {
+    "repo": "google/medsiglip-448",
+    "revision": "9cea28a1a1195f665105faa6e8544c112fd960a4",
+    "path": "models/google/medsiglip-448/tokenizer.json",
+    "bytes": 2399357,
+    "sha256": "c6e405cb7c670d56636a9402c81023a55bc6c3c53d89cf02b92f5c5005bfe920"
+  },
+  {
+    "repo": "google/medsiglip-448",
+    "revision": "9cea28a1a1195f665105faa6e8544c112fd960a4",
+    "path": "models/google/medsiglip-448/tokenizer_config.json",
+    "bytes": 809,
+    "sha256": "4699aef84d9e1c1d73e1c40d5c5ed52a22564690372932e216141277874c9979"
+  },
+  {
+    "repo": "facebook/dinov3-vitl16-pretrain-lvd1689m",
+    "revision": "ea8dc2863c51be0a264bab82070e3e8836b02d51",
+    "path": "models/facebook/dinov3-vitl16-pretrain-lvd1689m/.gitattributes",
+    "bytes": 1519,
+    "sha256": "11ad7efa24975ee4b0c3c3a38ed18737f0658a5f75a0a96787b576a78a023361"
+  },
+  {
+    "repo": "facebook/dinov3-vitl16-pretrain-lvd1689m",
+    "revision": "ea8dc2863c51be0a264bab82070e3e8836b02d51",
+    "path": "models/facebook/dinov3-vitl16-pretrain-lvd1689m/LICENSE.md",
+    "bytes": 7503,
+    "sha256": "25d122eb8f5b880fd23c736fb6ea8018ee45c12237e00b8a86d14c653904999e"
+  },
+  {
+    "repo": "facebook/dinov3-vitl16-pretrain-lvd1689m",
+    "revision": "ea8dc2863c51be0a264bab82070e3e8836b02d51",
+    "path": "models/facebook/dinov3-vitl16-pretrain-lvd1689m/README.md",
+    "bytes": 14520,
+    "sha256": "5395522a8a611d0578b6036f47e60445381ee4b2c7508f0e93d9e4c1e876fa63"
+  },
+  {
+    "repo": "facebook/dinov3-vitl16-pretrain-lvd1689m",
+    "revision": "ea8dc2863c51be0a264bab82070e3e8836b02d51",
+    "path": "models/facebook/dinov3-vitl16-pretrain-lvd1689m/config.json",
+    "bytes": 745,
+    "sha256": "135ecd23e34a70b6fbed8b083fdecb319b7e3a54e3d849258bbe4ddcf1783bb5"
+  },
+  {
+    "repo": "facebook/dinov3-vitl16-pretrain-lvd1689m",
+    "revision": "ea8dc2863c51be0a264bab82070e3e8836b02d51",
+    "path": "models/facebook/dinov3-vitl16-pretrain-lvd1689m/model.safetensors",
+    "bytes": 1212559808,
+    "sha256": "dcb2e45127cccbf1601e5f42fef165eea275c8e5213197e8dcf3f48822718179"
+  },
+  {
+    "repo": "facebook/dinov3-vitl16-pretrain-lvd1689m",
+    "revision": "ea8dc2863c51be0a264bab82070e3e8836b02d51",
+    "path": "models/facebook/dinov3-vitl16-pretrain-lvd1689m/preprocessor_config.json",
+    "bytes": 585,
+    "sha256": "960c41d1f3a7778b936365769a2d90550b318a6c0a53a0296957adacfe5e0dd7"
+  }
+]
