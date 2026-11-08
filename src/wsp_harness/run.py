@@ -61,7 +61,7 @@ def create_run(root: Path, arm: str, k: int, labels_dir: Path, pool_dir: Path,
               'labels_sha256': labels_hash, 'labels_dir': str(labels_dir), 'pool_dir': str(pool_dir),
               'start_utc': utc(now), 'deadline_utc': utc(deadline), 'deadline_epoch': deadline.timestamp(),
               'launch_prompt': prompt, 'launch_prompt_sha256': digest(prompt.encode()),
-              'image': IMAGE, 'image_id': image_id, 'test_model': test_model}
+              'n_pool': values['n_pool'], 'image': IMAGE, 'image_id': image_id, 'test_model': test_model}
     (run / 'launch.json').write_text(json.dumps(launch, indent=2) + '\n')
     (run / 'interventions.jsonl').touch(mode=0o600)
     (run / 'workspace/TASK.md').write_text(prompt)

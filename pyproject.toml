@@ -21,6 +21,7 @@ test = ["pytest>=8.3,<9"]
 
 [project.scripts]
 wsp-prep = "wsp_prep.cli:main"
+wsp-harness = "wsp_harness.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/wsp_prep", "src/wsp_harness"]

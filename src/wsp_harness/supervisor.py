@@ -65,6 +65,7 @@ class Supervisor:
         self.stop_signal = False
         self.log_file = (self.run / 'recorder/supervisor.log').open('a', buffering=1)
         self.final_snapshot: str | None = None
+        self.messages_delivered = 0
 
     # ---- logging / state ----
     def log(self, message: str) -> None:
@@ -86,7 +87,8 @@ class Supervisor:
             'idle_seconds': round(now - self.idle_since, 1) if self.idle_since else 0,
             'continuations': self.continuations, 'retries': self.retries, 'restarts': self.restarts,
             'snapshots': self.snapshots, 'last_error': self.last_error, 'container': self.container,
-            'final_snapshot': self.final_snapshot,
+            'final_snapshot': self.final_snapshot, 'messages_delivered': self.messages_delivered,
+            'backend': getattr(self.backend, '__name__', str(self.backend)).rsplit('.', 1)[-1],
         }
         tmp = self.run / 'state/.status.json.tmp'
         tmp.write_text(json.dumps(status, indent=2) + '\n')
@@ -112,7 +114,7 @@ class Supervisor:
         values = {'arm': self.launch['arm'], 'k': self.launch['k'], 'start_utc': self.launch['start_utc'],
                   'deadline_utc': self.launch['deadline_utc'], 'now_utc': utc(_now()),
                   'remaining': _remaining(self.deadline - now), 'weight_sentence': self.inputs.weight_sentence,
-                  'n_pool': 0}
+                  'n_pool': self.launch.get('n_pool', 0)}
         return render(self.inputs.continuation_template, values)
 
     def kill_processes(self) -> None:
@@ -221,6 +223,35 @@ class Supervisor:
         except (ValueError, OSError):
             return 'stop-request (unparseable)'
 
+    def deliver_messages(self) -> None:
+        """Deliver control/messages/*.json (written by `wsp-harness intervene --kind message`)."""
+        folder = self.run / 'control/messages'
+        if not folder.is_dir():
+            return
+        for path in sorted(folder.glob('*.json')):
+            done = folder / 'delivered'
+            done.mkdir(exist_ok=True)
+            target = done / path.name
+            try:
+                os.replace(path, target)  # claim first: never deliver twice
+                text = str(json.loads(target.read_text())['message'])
+            except (OSError, ValueError, KeyError) as exc:
+                self.log(f'bad message file {path.name}: {exc}')
+                continue
+            try:
+                if self.running:
+                    self.driver.send({'id': uuid.uuid4().hex, 'type': 'steer', 'message': text})
+                    mode = 'steer'
+                else:
+                    self.send_prompt(text)
+                    mode = 'prompt'
+            except OSError as exc:
+                self.last_error = f'message delivery failed: {exc}'
+                self.intervention('message-delivery-failed', file=path.name, error=str(exc))
+                continue
+            self.messages_delivered += 1
+            self.intervention('message-delivered', file=path.name, mode=mode)
+
     def freeze(self, reason: str) -> None:
         self.phase, self.reason = 'freezing', reason
         self.write_status()
@@ -248,6 +279,12 @@ class Supervisor:
                 self.backend.destroy(self.container)
         except Exception as exc:
             errors.append(f'destroy: {exc}')
+        try:
+            stop = getattr(self.backend, 'stop_helpers', None)
+            if stop:
+                stop()
+        except Exception as exc:
+            errors.append(f'helpers: {exc}')
         if errors:
             self.last_error = '; '.join(errors)
             self.log(f'freeze errors: {self.last_error}')
@@ -268,6 +305,7 @@ class Supervisor:
                 return 'deadline'
             if (reason := self.stop_request()) is not None:
                 return f'stop-request: {reason}'
+            self.deliver_messages()
             if now >= next_snapshot:
                 try:
                     evidence.snapshot(self.run / 'workspace', self.run / 'snapshots')
@@ -312,6 +350,9 @@ class Supervisor:
         reason = 'supervisor-error'
         try:
             self.container = self.backend.create(self.run)
+            start = getattr(self.backend, 'start_helpers', None)
+            if start:
+                start(self.run, self.container)
             self.write_status()
             self.start_pi(resume=False)
             self.send_prompt(self.launch['launch_prompt'])
@@ -327,12 +368,16 @@ class Supervisor:
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog='python -m wsp_harness.supervisor')
     p.add_argument('--run', required=True)
-    p.add_argument('--backend', default='simple', choices=['simple'])
+    p.add_argument('--backend', default='simple', choices=['simple', 'infra'])
     p.add_argument('--continue-after', type=float, default=300.0)
     p.add_argument('--snapshot-interval', type=float, default=3600.0)
     p.add_argument('--status-interval', type=float, default=30.0)
     a = p.parse_args(argv)
-    sup = Supervisor(Path(a.run), continue_after=a.continue_after, snapshot_interval=a.snapshot_interval,
+    if a.backend == 'infra':
+        from . import sandbox_infra as backend
+    else:
+        backend = sandbox_simple
+    sup = Supervisor(Path(a.run), backend=backend, continue_after=a.continue_after, snapshot_interval=a.snapshot_interval,
                      status_interval=a.status_interval)
     (sup.run / 'state/supervisor.pid').write_text(str(os.getpid()))
     print(sup.run_all())
