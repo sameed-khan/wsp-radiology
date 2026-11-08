@@ -1493,6 +1493,7 @@ source = { editable = "." }
 dependencies = [
     { name = "imagehash" },
     { name = "pillow" },
+    { name = "pyyaml" },
     { name = "requests" },
 ]
 
@@ -1513,6 +1514,7 @@ requires-dist = [
     { name = "imagehash", specifier = ">=4.3,<5" },
     { name = "pillow", specifier = ">=10.4,<13" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8.3,<9" },
+    { name = "pyyaml", specifier = ">=6.0,<7" },
     { name = "requests", specifier = ">=2.32,<3" },
     { name = "torch", marker = "extra == 'ml'", specifier = ">=2.5" },
 ]
