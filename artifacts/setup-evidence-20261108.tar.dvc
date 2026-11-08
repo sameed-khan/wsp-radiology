@@ -1,0 +1,5 @@
+outs:
+- md5: 236c42da6b8c474a463ded953ee1dfcf
+  size: 30720
+  hash: md5
+  path: setup-evidence-20261108.tar
