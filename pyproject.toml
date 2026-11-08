@@ -11,18 +11,20 @@ dependencies = [
   "Pillow>=10.4,<13",
   "ImageHash>=4.3,<5",
   "requests>=2.32,<3",
+  "numpy>=2,<3",
 ]
 
 [project.optional-dependencies]
 models = ["huggingface-hub>=0.26,<2"]
 ml = ["torch>=2.5"]
-test = ["pytest>=8.3,<9"]
+test = ["pytest>=8.3,<9", "scikit-learn>=1.5,<2"]
 
 [project.scripts]
 wsp-prep = "wsp_prep.cli:main"
+wsp-eval = "wsp_eval.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/wsp_prep"]
+packages = ["src/wsp_prep", "src/wsp_eval"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
