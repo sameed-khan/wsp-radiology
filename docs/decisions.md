@@ -148,3 +148,15 @@ and MedSigLIP/DINOv3 at their 2/3-depth layer, with pool mean latent activations
 quality statistics. No test-set data are included. The launch prompt gains one
 identical sentence; agents may ignore them or train their own. This slightly steers
 both arms toward SAE-based workflows (plan §7.3 already lists SAE tooling).
+
+## ADR-005: Deadline extensions for API rate-limit downtime (standing rule)
+
+**Status:** accepted by the investigator, 2026-11-10.
+
+Any F/G session time lost to provider rate limiting or usage-limit errors is added
+back to that session's deadline. The supervisor measures each outage (from the first
+rate-limit failure until the next successful model event), extends that session's
+deadline by the measured duration, logs it as an automatic infrastructure event and
+sends the agent a fixed, preregistered notice with the new deadline (no task advice).
+The k=10 sessions launched 2026-11-10 lost about 2.5 h each (18:26 to ~20:55 UTC) and
+are extended retroactively by their measured outages.
