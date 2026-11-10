@@ -178,6 +178,47 @@ def cmd_extend(args) -> int:
     return 0
 
 
+def cmd_detach(args) -> int:
+    run = _run_dir(args)
+    if not _alive_supervisor(run):
+        raise SystemExit('error: supervisor is not running')
+    (run / 'control/DETACH').touch()
+    until = time.monotonic() + 60
+    while time.monotonic() < until:
+        if not _alive_supervisor(run):
+            status = _read_json(run / 'state/status.json', {})
+            if status.get('phase') == 'detached':
+                print(f'detached {run.name}')
+                return 0
+            raise SystemExit('error: supervisor exited without detaching')
+        time.sleep(0.2)
+    raise SystemExit('error: detach timed out; inspect status')
+
+
+def cmd_adopt(args) -> int:
+    run = _run_dir(args)
+    if _alive_supervisor(run):
+        raise SystemExit('error: supervisor is still running')
+    status = _read_json(run / 'state/status.json', {})
+    if str(status.get('phase', '')).startswith('frozen'):
+        raise SystemExit('error: run is frozen')
+    out = run / 'recorder/supervisor.stdout'
+    with out.open('ab') as log:
+        proc = subprocess.Popen([sys.executable, '-m', 'wsp_harness.supervisor', '--run', str(run), '--adopt'],
+                                stdin=subprocess.DEVNULL, stdout=log, stderr=log, cwd=REPO,
+                                start_new_session=True, close_fds=True)
+    until = time.monotonic() + 60
+    while time.monotonic() < until:
+        st = _read_json(run / 'state/status.json', {})
+        if st.get('pid') == proc.pid and st.get('phase') in ('running', 'idle', 'retrying'):
+            print(f'adopted {run.name}')
+            return 0
+        if proc.poll() is not None:
+            raise SystemExit(f'error: adoption failed; see {out}')
+        time.sleep(0.2)
+    raise SystemExit(f'error: adoption timed out; inspect {out}')
+
+
 def cmd_stop(args) -> int:
     run = _run_dir(args)
     if not args.reason.strip():
@@ -576,6 +617,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(func=cmd_intervene)
     s = sub.add_parser('extend'); s.add_argument('--run', required=True); s.add_argument('--seconds', type=float, required=True)
     s.add_argument('--reason', required=True); s.set_defaults(func=cmd_extend)
+    s = sub.add_parser('detach'); s.add_argument('--run', required=True); s.set_defaults(func=cmd_detach)
+    s = sub.add_parser('adopt'); s.add_argument('--run', required=True); s.set_defaults(func=cmd_adopt)
     s = sub.add_parser('stop'); s.add_argument('--run', required=True); s.add_argument('--reason', required=True)
     s.set_defaults(func=cmd_stop)
     s = sub.add_parser('verify'); s.add_argument('--run', required=True); s.set_defaults(func=cmd_verify)

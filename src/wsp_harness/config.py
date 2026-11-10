@@ -59,7 +59,7 @@ def pi_argv(inputs: Inputs, repo: Path, recorder: Path) -> list[str]:
     ]
 
 
-def load_inputs(root: Path, arm: str, *, allow_test_model: bool = False) -> Inputs:
+def load_inputs(root: Path, arm: str, *, allow_test_model: bool = False, legacy_extension: bool = False) -> Inputs:
     arm = arm.upper()
     if arm not in {'F', 'G', 'R'}:
         raise ValueError('arm must be F, G or R')
@@ -70,6 +70,8 @@ def load_inputs(root: Path, arm: str, *, allow_test_model: bool = False) -> Inpu
         'extension': root / '.pi' / 'prompts' / 'wsp-extension.md',
         'weights': root / '.pi' / 'prompts' / 'weight-sentences.json',
     }
+    if legacy_extension and not paths['extension'].exists():
+        paths['extension'] = Path(__file__).resolve().parents[2] / '.pi/prompts/wsp-extension.md'
     raw = {name: path.read_bytes() for name, path in paths.items()}
     definition = raw['arm'].decode('utf-8')
     match = re.fullmatch(r'---\s*\n(.*?)\n---\s*\n(.*)', definition, re.DOTALL)

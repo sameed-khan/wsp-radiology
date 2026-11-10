@@ -50,6 +50,23 @@ def create(run: Path) -> str:
     return sb.container
 
 
+def adopt(run: Path) -> str:
+    run = Path(run).resolve()
+    launch = json.loads((run / 'launch.json').read_text())
+    state = json.loads((run / 'state/sandbox.json').read_text())
+    mod = _sandbox_module()
+    sb = mod.names(launch['run_id'])
+    if any(state.get(k) != getattr(sb, k) for k in ('run_id', 'container', 'proxy', 'network')):
+        raise RuntimeError('sandbox state does not match run identity')
+    _config(run)
+    for name in (sb.container, sb.proxy):
+        running = subprocess.check_output(['docker', 'inspect', '--format', '{{.State.Running}}', name], text=True).strip()
+        if running != 'true':
+            raise RuntimeError(f'{name} is not running')
+    _SANDBOXES[sb.container] = sb
+    return sb.container
+
+
 def pause(container: str) -> None:
     _sandbox_module().pause(_SANDBOXES[container])
 
@@ -82,6 +99,17 @@ def start_helpers(run: Path, container: str) -> None:
         (run / 'state' / name).mkdir(exist_ok=True)
     env = {k: v for k, v in os.environ.items() if k in ('PATH', 'HOME', 'LANG', 'PYTHONPATH')}
     for argv in helper_argv(run, container):
+        # A crashed supervisor may have left detached helpers. Replace only exact
+        # command lines for this run, never unrelated host processes.
+        for proc in Path('/proc').iterdir():
+            if not proc.name.isdigit():
+                continue
+            try:
+                args = (proc / 'cmdline').read_bytes().split(b'\0')
+                if [x.decode() for x in args if x] == argv:
+                    os.kill(int(proc.name), signal.SIGTERM)
+            except (OSError, UnicodeError):
+                pass
         _spawn_helper(run, argv, env)
 
 
