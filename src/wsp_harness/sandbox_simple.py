@@ -21,6 +21,15 @@ def create(run: Path) -> str:
     return name
 
 
+def adopt(run: Path) -> str:
+    launch = json.loads((Path(run) / 'launch.json').read_text())
+    name = 'wsp-agent-' + launch['run_id']
+    running = subprocess.check_output(['docker', 'inspect', '--format', '{{.State.Running}}', name], text=True).strip()
+    if running != 'true':
+        raise RuntimeError('sandbox is not running')
+    return name
+
+
 def destroy(container: str) -> None:
     if not container.startswith('wsp-agent-'):
         raise ValueError('refusing to remove non-agent container')

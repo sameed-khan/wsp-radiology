@@ -6,6 +6,7 @@ agent control over timing: all decisions use the host clock and host-side files.
 from __future__ import annotations
 
 import argparse
+import fcntl
 from datetime import datetime, timedelta, timezone
 import json
 import os
@@ -19,13 +20,18 @@ import time
 import traceback
 import uuid
 
-from . import evidence, sandbox_simple
+from . import deadline, evidence, sandbox_simple
 from .config import load_inputs, render
 from .run import RpcDriver, utc
 
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def is_rate_limit(error: object) -> bool:
+    text = str(error).lower()
+    return any(term in text for term in ('429', 'rate_limit_error', 'rate limit', 'usage limit', 'overloaded', '529'))
 
 
 def _remaining(seconds: float) -> str:
@@ -36,17 +42,25 @@ def _remaining(seconds: float) -> str:
 class Supervisor:
     def __init__(self, run: Path, *, backend=sandbox_simple, continue_after: float = 300.0,
                  snapshot_interval: float = 3600.0, status_interval: float = 30.0,
-                 retry_base: float = 1.0, retry_cap: float = 900.0, tick: float = 1.0):
+                 retry_base: float = 1.0, retry_cap: float = 900.0, tick: float = 1.0, adopt: bool = False):
         self.run = Path(run).resolve()
         self.launch = json.loads((self.run / 'launch.json').read_text())
         self.root = self.run.parent.parent
-        self.inputs = load_inputs(self.root, self.launch['arm'], allow_test_model=self.launch['test_model'])
-        if self.inputs.hashes != self.launch['input_hashes']:
+        self.adopt = adopt
+        expected = self.launch['input_hashes']
+        legacy = adopt and 'extension' not in expected
+        self.inputs = load_inputs(self.root, self.launch['arm'], allow_test_model=self.launch['test_model'], legacy_extension=legacy)
+        actual = {k: v for k, v in self.inputs.hashes.items() if not (legacy and k == 'extension')}
+        if actual != expected:
             raise RuntimeError('preregistered inputs changed since launch.json was written')
         self.backend = backend
         self.continue_after, self.snapshot_interval = continue_after, snapshot_interval
         self.status_interval, self.retry_base, self.retry_cap, self.tick = status_interval, retry_base, retry_cap, tick
-        self.deadline = float(self.launch['deadline_epoch'])
+        self.original_deadline = float(self.launch['deadline_epoch'])
+        self.deadline = self.original_deadline
+        self.extensions_seconds = 0.0
+        self.outage_start: float | None = None
+        self.refresh_deadline()
         self.start = datetime.fromisoformat(self.launch['start_utc'].replace('Z', '+00:00')).timestamp()
         self.container: str | None = None
         self.driver: RpcDriver | None = None
@@ -66,6 +80,55 @@ class Supervisor:
         self.log_file = (self.run / 'recorder/supervisor.log').open('a', buffering=1)
         self.final_snapshot: str | None = None
         self.messages_delivered = 0
+        if adopt:
+            status = json.loads((self.run / 'state/status.json').read_text())
+            if str(status.get('phase', '')).startswith('frozen'):
+                raise RuntimeError('cannot adopt a frozen run')
+            for key in ('turns', 'tool_calls', 'continuations', 'retries', 'restarts', 'snapshots', 'messages_delivered'):
+                setattr(self, key, status.get(key, 0))
+            self.last_error = status.get('last_error')
+
+    def refresh_deadline(self) -> None:
+        seconds = deadline.total(self.run)
+        self.extensions_seconds = seconds
+        self.deadline = self.original_deadline + seconds
+        state = {'deadline_epoch': self.deadline, 'deadline_utc': utc(datetime.fromtimestamp(self.deadline, timezone.utc)),
+                 'extensions_seconds': seconds}
+        path = self.run / 'state/deadline.json'
+        if not path.exists() or json.loads(path.read_text()) != state:
+            tmp = path.with_name(f'.deadline.{os.getpid()}.{uuid.uuid4().hex}.tmp')
+            tmp.write_text(json.dumps(state) + '\n')
+            os.replace(tmp, path)
+
+    def rate_failure(self, error: object, now: float) -> None:
+        if self.outage_start is None and is_rate_limit(error):
+            self.outage_start = now
+            (self.run / 'state/rate-limit-outage.json').write_text(json.dumps({'start_epoch': now}) + '\n')
+
+    def rate_recovered(self, now: float) -> None:
+        if self.outage_start is None:
+            return
+        start = self.outage_start
+        seconds = max(now - start, 0.000001)
+        record = {'time_utc': utc(datetime.fromtimestamp(now, timezone.utc)), 'seconds': seconds,
+                  'reason': 'rate-limit', 'kind': 'auto',
+                  'outage_start_utc': utc(datetime.fromtimestamp(start, timezone.utc)),
+                  'outage_end_utc': utc(datetime.fromtimestamp(now, timezone.utc))}
+        deadline.append(self.run, record)
+        self.outage_start = None
+        self.refresh_deadline()
+        (self.run / 'state/rate-limit-outage.json').unlink(missing_ok=True)
+        self.intervention('rate-limit-extension', **record)
+        text = self.inputs.extension_template.format(lost=_remaining(seconds), deadline_utc=utc(datetime.fromtimestamp(self.deadline, timezone.utc)),
+                               remaining=_remaining(self.deadline - now)).strip()
+        if self.running:
+            self.driver.send({'id': uuid.uuid4().hex, 'type': 'steer', 'message': text})
+            mode = 'steer'
+        else:
+            self.send_prompt(text)
+            mode = 'prompt'
+        self.messages_delivered += 1
+        self.intervention('rate-limit-notice-delivered', mode=mode, message=text)
 
     # ---- logging / state ----
     def log(self, message: str) -> None:
@@ -81,7 +144,9 @@ class Supervisor:
         now = time.time()
         status = {
             'run_id': self.launch['run_id'], 'pid': os.getpid(), 'phase': self.phase, 'reason': self.reason,
-            'updated_utc': utc(_now()), 'start_utc': self.launch['start_utc'], 'deadline_utc': self.launch['deadline_utc'],
+            'updated_utc': utc(_now()), 'start_utc': self.launch['start_utc'],
+            'deadline_utc': utc(datetime.fromtimestamp(self.deadline, timezone.utc)),
+            'original_deadline_utc': self.launch['deadline_utc'], 'extensions_seconds': self.extensions_seconds,
             'last_event_utc': utc(datetime.fromtimestamp(self.last_event, timezone.utc)) if self.last_event else None,
             'turns': self.turns, 'tool_calls': self.tool_calls, 'agent_running': self.running,
             'idle_seconds': round(now - self.idle_since, 1) if self.idle_since else 0,
@@ -99,8 +164,9 @@ class Supervisor:
         extra = []
         if resume:
             sessions = sorted((self.run / 'recorder/sessions').glob('*.jsonl'), key=lambda p: p.stat().st_mtime)
-            if sessions:
-                extra = ['--session', str(sessions[-1])]
+            if not sessions:
+                raise RuntimeError('no parent session to resume')
+            extra = ['--session', str(sessions[-1])]
         self.driver = RpcDriver(self.run, self.inputs, self.container, extra_args=extra)
         self.running = False
 
@@ -112,7 +178,7 @@ class Supervisor:
     def continuation_text(self) -> str:
         now = time.time()
         values = {'arm': self.launch['arm'], 'k': self.launch['k'], 'start_utc': self.launch['start_utc'],
-                  'deadline_utc': self.launch['deadline_utc'], 'now_utc': utc(_now()),
+                  'deadline_utc': utc(datetime.fromtimestamp(self.deadline, timezone.utc)), 'now_utc': utc(_now()),
                   'remaining': _remaining(self.deadline - now), 'weight_sentence': self.inputs.weight_sentence,
                   'n_pool': self.launch.get('n_pool', 0)}
         return render(self.inputs.continuation_template, values)
@@ -157,6 +223,13 @@ class Supervisor:
     def handle_event(self, event: dict) -> None:
         self.last_event = time.time()
         kind = event.get('type')
+        if kind == 'auto_retry_start':
+            self.rate_failure(event.get('errorMessage', event.get('error', '')), self.last_event)
+        elif kind == 'message_update':
+            msg = event.get('message') or {}
+            update = event.get('assistantMessageEvent') or {}
+            if msg.get('role') == 'assistant' and update.get('type') in ('text_delta', 'thinking_delta', 'toolcall_delta'):
+                self.rate_recovered(self.last_event)
         if kind == 'turn_start':
             self.turns += 1
         elif kind == 'tool_execution_end':
@@ -167,11 +240,16 @@ class Supervisor:
                 self.last_stop = msg.get('stopReason')
                 if self.last_stop == 'error':
                     self.last_error = str(msg.get('errorMessage', 'assistant error'))[:500]
+                    self.rate_failure(self.last_error, self.last_event)
+                elif self.last_stop not in ('aborted',):
+                    self.rate_recovered(self.last_event)
         elif kind == 'auto_retry_end' and event.get('success') is False:
             self.last_error = str(event.get('finalError', 'retry failed'))[:500]
+            self.rate_failure(self.last_error, self.last_event)
         elif kind == 'response' and event.get('command') == 'prompt':
             if event.get('success') is False:
                 self.last_error = str(event.get('error'))[:500]
+                self.rate_failure(self.last_error, self.last_event)
                 self.schedule_retry('error')
             elif (event.get('data') or {}).get('disposition') == 'handled':
                 self.running = False
@@ -296,12 +374,15 @@ class Supervisor:
         next_status = 0.0
         while True:
             now = time.time()
+            self.refresh_deadline()
             if now >= next_status:
                 self.write_status()
                 next_status = now + self.status_interval
+            if (self.run / 'control/DETACH').exists():
+                return 'detached'
             if self.stop_signal:
                 return 'signal'
-            if now >= self.deadline:
+            if now >= self.deadline and self.outage_start is None:
                 return 'deadline'
             if (reason := self.stop_request()) is not None:
                 return f'stop-request: {reason}'
@@ -318,7 +399,7 @@ class Supervisor:
                     self.log(f'periodic snapshot failed: {exc}')
                 next_snapshot = time.time() + self.snapshot_interval
             try:
-                event = self.driver.events.get(timeout=min(self.tick, max(0.0, self.deadline - time.time())))
+                event = self.driver.events.get(timeout=self.tick if self.outage_start is not None else min(self.tick, max(0.0, self.deadline - time.time())))
             except queue.Empty:
                 event = None
             if isinstance(event, Exception):
@@ -352,36 +433,76 @@ class Supervisor:
             signal.signal(signal.SIGINT, on_term)
         reason = 'supervisor-error'
         try:
-            self.container = self.backend.create(self.run)
+            if self.adopt:
+                self.container = self.backend.adopt(self.run)
+                self.kill_processes()  # reap any Pi processes orphaned by a crashed supervisor
+                marker = self.run / 'state/rate-limit-outage.json'
+                if marker.exists():
+                    archived = marker.with_name(f'rate-limit-outage-interrupted-{uuid.uuid4().hex}.json')
+                    os.replace(marker, archived)
+                    self.intervention('interrupted-outage-archived', kind='infra', file=archived.name,
+                                      note='operator must explicitly backfill any uncredited outage')
+            else:
+                self.container = self.backend.create(self.run)
             start = getattr(self.backend, 'start_helpers', None)
             if start:
                 start(self.run, self.container)
             self.write_status()
-            self.start_pi(resume=False)
-            self.send_prompt(self.launch['launch_prompt'])
+            self.start_pi(resume=self.adopt)
+            if self.adopt:
+                self.intervention('supervisor-adopted', kind='infra')
+                self.send_prompt(self.continuation_text())
+            else:
+                self.send_prompt(self.launch['launch_prompt'])
             reason = self.run_loop()
         except BaseException as exc:
             self.last_error = f'{type(exc).__name__}: {exc}'
             self.log(traceback.format_exc())
         finally:
-            self.freeze(reason)
+            if reason == 'detached' or (self.adopt and reason == 'supervisor-error'):
+                self.kill_processes()
+                stop = getattr(self.backend, 'stop_helpers', None)
+                if stop:
+                    stop()
+                self.running = False
+                self.phase, self.reason = 'detached', reason
+                if reason == 'detached':
+                    (self.run / 'control/DETACH').unlink(missing_ok=True)
+                    self.intervention('supervisor-detached', kind='infra')
+                self.write_status()
+            else:
+                self.freeze(reason)
         return reason
 
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog='python -m wsp_harness.supervisor')
     p.add_argument('--run', required=True)
-    p.add_argument('--backend', default='simple', choices=['simple', 'infra'])
+    p.add_argument('--backend', choices=['simple', 'infra'])
+    p.add_argument('--adopt', action='store_true')
     p.add_argument('--continue-after', type=float, default=300.0)
     p.add_argument('--snapshot-interval', type=float, default=3600.0)
     p.add_argument('--status-interval', type=float, default=30.0)
     a = p.parse_args(argv)
-    if a.backend == 'infra':
+    run = Path(a.run).resolve()
+    lock = (run / 'state/supervisor.lock').open('a')
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        raise SystemExit('error: supervisor already owns run')
+    if a.adopt:
+        from .cli import _alive_supervisor
+        if _alive_supervisor(run):
+            raise SystemExit('error: supervisor is still running')
+        if (run / 'control/DETACH').exists():
+            raise SystemExit('error: pending detach request')
+    backend_name = a.backend or ('infra' if (run / 'state/backend.json').exists() else 'simple')
+    if backend_name == 'infra':
         from . import sandbox_infra as backend
     else:
         backend = sandbox_simple
     sup = Supervisor(Path(a.run), backend=backend, continue_after=a.continue_after, snapshot_interval=a.snapshot_interval,
-                     status_interval=a.status_interval)
+                     status_interval=a.status_interval, adopt=a.adopt)
     (sup.run / 'state/supervisor.pid').write_text(str(os.getpid()))
     print(sup.run_all())
     return 0

@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, openSync, closeSync, writeSync, writeFileSync } from "node:fs";
+import { mkdirSync, openSync, closeSync, writeSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { StringDecoder } from "node:string_decoder";
@@ -24,7 +24,15 @@ export default function (pi: ExtensionAPI) {
   }
   const dir = resolve(recorder, "subagents");
   mkdirSync(dir, { recursive: true, mode: 0o700 });
-  const expired = () => Date.now() >= deadline * 1000;
+  const currentDeadline = () => {
+    try {
+      const value = JSON.parse(readFileSync(process.env.WSP_DEADLINE_FILE!, "utf8")).deadline_epoch;
+      if (typeof value === "number" && Number.isFinite(value) && value > 0) return value;
+    } catch { /* fall back to launch deadline */ }
+    return deadline;
+  };
+  const outageActive = () => !!process.env.WSP_DEADLINE_FILE && existsSync(join(dirname(process.env.WSP_DEADLINE_FILE), "rate-limit-outage.json"));
+  const expired = () => !outageActive() && Date.now() >= currentDeadline() * 1000;
   function finish(job: Job, error?: string) {
     if (job.state === "completed" || job.state === "failed") return;
     if (job.state === "running") running--;
@@ -44,9 +52,9 @@ export default function (pi: ExtensionAPI) {
   }
   let timer: NodeJS.Timeout | undefined;
   function scheduleDeadline() {
-    const remaining = deadline * 1000 - Date.now();
-    if (remaining <= 0) { terminate(); return; }
-    timer = setTimeout(scheduleDeadline, Math.min(remaining, 2147483647));
+    const remaining = currentDeadline() * 1000 - Date.now();
+    if (remaining <= 0 && !outageActive()) { terminate(); return; }
+    timer = setTimeout(scheduleDeadline, Math.max(1, Math.min(remaining > 0 ? remaining : 1000, 1000)));
     timer.unref();
   }
   function pump() {

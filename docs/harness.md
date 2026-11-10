@@ -68,14 +68,28 @@ watcher/watchdog outages between checks are possible.
   State, proxy logs, CA keys and helper logs stay under the run's `state/`.
   `TASK.md`, `output/`, and (when available in the root or image) `TOOLKIT.md`
   are seeded in the workspace. The launch receipt records the selected image.
-- `status [--run R]` — all runs, or one run's status.json plus supervisor liveness.
+- `status [--run R]` — all runs, or one run's status.json plus supervisor liveness. The effective deadline, original deadline and total extension seconds are recorded in status.
+- `extend --run R --seconds S --reason TEXT` — append a positive finite number of seconds to the host-owned extension ledger and log an infrastructure intervention. The supervisor picks it up on its next tick; `state/deadline.json` publishes the effective deadline atomically to subagents. An automatic rate-limit outage runs from the first classified failure to the next successful model progress; a fixed notice is sent after recovery. During an unresolved outage the supervisor and subagents wait for recovery rather than freezing at the unextended deadline. Stop remains available for operator action.
 - `intervene --run R --kind infra|message --note TEXT` — logged; `message` is
   delivered as a Pi steer (or prompt when idle).
+- `detach --run R` — abort Pi, terminate its process group and recorded children, stop helpers, and exit with phase `detached`; the sandbox and proxy remain running and no final snapshot is taken. Waits for supervisor exit.
+- `adopt --run R` — start a new supervisor on the existing sandbox, restoring counters and the latest parent session; resumes with the standard continuation prompt. Backend is inferred from `state/backend.json`; no sandbox is created. Refuses a live supervisor or frozen run. Adoption failures leave the sandbox running for operator investigation.
 - `stop --run R --reason TEXT` — writes control/STOP_REQUEST.json; supervisor freezes.
 - `verify --run R` — JSON completeness report (exit 1 when incomplete).
 - `account --run R [--no-prices]` — usage/cost by model, source, token type; retries; wall clock; GPU.
 - `seal --run R [--artifacts DIR]` — receipt.json with sha256s, secret scan,
   copy to `artifacts/runs/<run>/` for `dvc add`. Never pushes.
+
+## Cutover procedure
+
+From the **new code worktree**, using an absolute run directory `R` and the same host account/environment as launch:
+
+1. `uv run wsp-harness detach --run "$R"`; inspect `uv run wsp-harness status --run "$R"` for `phase: detached`, no live supervisor, and confirm the agent (and infra proxy) remain running. Detach is supported only by supervisors started with this version of the code.
+2. For an older supervisor that has no detach implementation, first independently verify its PID and command line against `R/state/supervisor.pid`, then `kill -KILL "$PID"` (NOT SIGTERM, which freezes the run). Wait for it to exit; the new supervisor reaps orphaned Pi/children and replaces matching run-specific helpers. This abrupt fallback can interrupt a tool result and lose the last status-counter interval; verify and audit the resulting evidence. Do not use it on a different run or PID. Containers remain running. The normal detach command is preferable.
+3. Inspect `state/rate-limit-outage.json` and the extension ledger. An interrupted outage is **not** automatically recovered; calculate any uncredited outage explicitly and run `uv run wsp-harness extend --run "$R" --seconds S --reason 'measured provider outage / cutover'` before adoption. Avoid double-counting existing ledger entries. Adoption archives the interrupted marker under `state/rate-limit-outage-interrupted-*.json` so it remains evidence without falsely suspending child deadlines. Use the same procedure for measured cutover downtime if appropriate.
+4. `uv run wsp-harness adopt --run "$R"`; inspect status, `interventions.jsonl`, supervisor log and helper/proxy logs. The new supervisor resumes the latest parent session file with a standard continuation, not the launch prompt. Monitor until normal deadline freeze, then `uv run wsp-harness verify --run "$R"`. On failure do not assume the sandbox was frozen: inspect status/logs and repair or stop deliberately. Do not run two supervisors concurrently.
+
+Legacy launches without the new extension prompt hash still validate every original input hash; the fixed extension prompt comes from the new worktree. Extension code changes at cutover are recorded by the intervention rather than altering the original launch receipt. Abrupt replacement cannot recover counters since the last status write or guarantee a complete interrupted tool call; `verify` exposes mismatched tool-result records. Check remaining Docker resources if a supervisor fails during cutover.
 
 ## Tests
 `uv run --extra test pytest -q` (offline). Paid/Docker: `WSP_LIVE=1 uv run --extra test pytest -q tests/test_harness_run.py tests/test_harness_supervisor.py tests/test_harness_cli.py tests/test_harness_e2e.py`;
