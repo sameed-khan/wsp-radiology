@@ -19,13 +19,18 @@ import time
 import traceback
 import uuid
 
-from . import evidence, sandbox_simple
+from . import deadline, evidence, sandbox_simple
 from .config import load_inputs, render
 from .run import RpcDriver, utc
 
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def is_rate_limit(error: object) -> bool:
+    text = str(error).lower()
+    return any(term in text for term in ('429', 'rate_limit_error', 'rate limit', 'usage limit', 'overloaded', '529'))
 
 
 def _remaining(seconds: float) -> str:
@@ -46,7 +51,11 @@ class Supervisor:
         self.backend = backend
         self.continue_after, self.snapshot_interval = continue_after, snapshot_interval
         self.status_interval, self.retry_base, self.retry_cap, self.tick = status_interval, retry_base, retry_cap, tick
-        self.deadline = float(self.launch['deadline_epoch'])
+        self.original_deadline = float(self.launch['deadline_epoch'])
+        self.deadline = self.original_deadline
+        self.extensions_seconds = 0.0
+        self.outage_start: float | None = None
+        self.refresh_deadline()
         self.start = datetime.fromisoformat(self.launch['start_utc'].replace('Z', '+00:00')).timestamp()
         self.container: str | None = None
         self.driver: RpcDriver | None = None
@@ -67,6 +76,48 @@ class Supervisor:
         self.final_snapshot: str | None = None
         self.messages_delivered = 0
 
+    def refresh_deadline(self) -> None:
+        seconds = deadline.total(self.run)
+        self.extensions_seconds = seconds
+        self.deadline = self.original_deadline + seconds
+        state = {'deadline_epoch': self.deadline, 'deadline_utc': utc(datetime.fromtimestamp(self.deadline, timezone.utc)),
+                 'extensions_seconds': seconds}
+        path = self.run / 'state/deadline.json'
+        if not path.exists() or json.loads(path.read_text()) != state:
+            tmp = path.with_name(f'.deadline.{os.getpid()}.{uuid.uuid4().hex}.tmp')
+            tmp.write_text(json.dumps(state) + '\n')
+            os.replace(tmp, path)
+
+    def rate_failure(self, error: object, now: float) -> None:
+        if self.outage_start is None and is_rate_limit(error):
+            self.outage_start = now
+            (self.run / 'state/rate-limit-outage.json').write_text(json.dumps({'start_epoch': now}) + '\n')
+
+    def rate_recovered(self, now: float) -> None:
+        if self.outage_start is None:
+            return
+        start = self.outage_start
+        seconds = max(now - start, 0.000001)
+        record = {'time_utc': utc(datetime.fromtimestamp(now, timezone.utc)), 'seconds': seconds,
+                  'reason': 'rate-limit', 'kind': 'auto',
+                  'outage_start_utc': utc(datetime.fromtimestamp(start, timezone.utc)),
+                  'outage_end_utc': utc(datetime.fromtimestamp(now, timezone.utc))}
+        deadline.append(self.run, record)
+        self.outage_start = None
+        self.refresh_deadline()
+        (self.run / 'state/rate-limit-outage.json').unlink(missing_ok=True)
+        self.intervention('rate-limit-extension', **record)
+        text = self.inputs.extension_template.format(lost=_remaining(seconds), deadline_utc=utc(datetime.fromtimestamp(self.deadline, timezone.utc)),
+                               remaining=_remaining(self.deadline - now)).strip()
+        if self.running:
+            self.driver.send({'id': uuid.uuid4().hex, 'type': 'steer', 'message': text})
+            mode = 'steer'
+        else:
+            self.send_prompt(text)
+            mode = 'prompt'
+        self.messages_delivered += 1
+        self.intervention('rate-limit-notice-delivered', mode=mode, message=text)
+
     # ---- logging / state ----
     def log(self, message: str) -> None:
         self.log_file.write(f'{utc(_now())} {message}\n')
@@ -81,7 +132,9 @@ class Supervisor:
         now = time.time()
         status = {
             'run_id': self.launch['run_id'], 'pid': os.getpid(), 'phase': self.phase, 'reason': self.reason,
-            'updated_utc': utc(_now()), 'start_utc': self.launch['start_utc'], 'deadline_utc': self.launch['deadline_utc'],
+            'updated_utc': utc(_now()), 'start_utc': self.launch['start_utc'],
+            'deadline_utc': utc(datetime.fromtimestamp(self.deadline, timezone.utc)),
+            'original_deadline_utc': self.launch['deadline_utc'], 'extensions_seconds': self.extensions_seconds,
             'last_event_utc': utc(datetime.fromtimestamp(self.last_event, timezone.utc)) if self.last_event else None,
             'turns': self.turns, 'tool_calls': self.tool_calls, 'agent_running': self.running,
             'idle_seconds': round(now - self.idle_since, 1) if self.idle_since else 0,
@@ -112,7 +165,7 @@ class Supervisor:
     def continuation_text(self) -> str:
         now = time.time()
         values = {'arm': self.launch['arm'], 'k': self.launch['k'], 'start_utc': self.launch['start_utc'],
-                  'deadline_utc': self.launch['deadline_utc'], 'now_utc': utc(_now()),
+                  'deadline_utc': utc(datetime.fromtimestamp(self.deadline, timezone.utc)), 'now_utc': utc(_now()),
                   'remaining': _remaining(self.deadline - now), 'weight_sentence': self.inputs.weight_sentence,
                   'n_pool': self.launch.get('n_pool', 0)}
         return render(self.inputs.continuation_template, values)
@@ -157,6 +210,13 @@ class Supervisor:
     def handle_event(self, event: dict) -> None:
         self.last_event = time.time()
         kind = event.get('type')
+        if kind == 'auto_retry_start':
+            self.rate_failure(event.get('errorMessage', event.get('error', '')), self.last_event)
+        elif kind == 'message_update':
+            msg = event.get('message') or {}
+            update = event.get('assistantMessageEvent') or {}
+            if msg.get('role') == 'assistant' and update.get('type') in ('text_delta', 'thinking_delta', 'toolcall_delta'):
+                self.rate_recovered(self.last_event)
         if kind == 'turn_start':
             self.turns += 1
         elif kind == 'tool_execution_end':
@@ -167,11 +227,16 @@ class Supervisor:
                 self.last_stop = msg.get('stopReason')
                 if self.last_stop == 'error':
                     self.last_error = str(msg.get('errorMessage', 'assistant error'))[:500]
+                    self.rate_failure(self.last_error, self.last_event)
+                elif self.last_stop not in ('aborted',):
+                    self.rate_recovered(self.last_event)
         elif kind == 'auto_retry_end' and event.get('success') is False:
             self.last_error = str(event.get('finalError', 'retry failed'))[:500]
+            self.rate_failure(self.last_error, self.last_event)
         elif kind == 'response' and event.get('command') == 'prompt':
             if event.get('success') is False:
                 self.last_error = str(event.get('error'))[:500]
+                self.rate_failure(self.last_error, self.last_event)
                 self.schedule_retry('error')
             elif (event.get('data') or {}).get('disposition') == 'handled':
                 self.running = False
@@ -296,12 +361,13 @@ class Supervisor:
         next_status = 0.0
         while True:
             now = time.time()
+            self.refresh_deadline()
             if now >= next_status:
                 self.write_status()
                 next_status = now + self.status_interval
             if self.stop_signal:
                 return 'signal'
-            if now >= self.deadline:
+            if now >= self.deadline and self.outage_start is None:
                 return 'deadline'
             if (reason := self.stop_request()) is not None:
                 return f'stop-request: {reason}'
@@ -318,7 +384,7 @@ class Supervisor:
                     self.log(f'periodic snapshot failed: {exc}')
                 next_snapshot = time.time() + self.snapshot_interval
             try:
-                event = self.driver.events.get(timeout=min(self.tick, max(0.0, self.deadline - time.time())))
+                event = self.driver.events.get(timeout=self.tick if self.outage_start is not None else min(self.tick, max(0.0, self.deadline - time.time())))
             except queue.Empty:
                 event = None
             if isinstance(event, Exception):

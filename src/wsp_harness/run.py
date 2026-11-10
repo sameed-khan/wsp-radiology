@@ -109,12 +109,15 @@ class RpcDriver:
         env = {key: os.environ[key] for key in HOST_ENV if key in os.environ}
         env.update(WSP_CONTAINER=container, WSP_EXEC_USER='1004:1004',
                    WSP_RECORDER_DIR=str(self.run / 'recorder'),
-                   WSP_DEADLINE_EPOCH=str(launch['deadline_epoch']))
+                   WSP_DEADLINE_EPOCH=str(launch['deadline_epoch']),
+                   WSP_DEADLINE_FILE=str(self.run / 'state/deadline.json'))
         self.process = subprocess.Popen([*pi_argv(inputs, repo, self.run / 'recorder'), *extra_args],
                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                         stderr=(self.run / 'recorder/pi-stderr.log').open('ab'),
                                         env=env, cwd=repo, start_new_session=True)
         self.events = queue.Queue()
+        self.test_failures = int(os.environ.get('WSP_TEST_429_FAILURES', '0')) if launch.get('test_model') else 0
+        self.test_original_prompt = None
         self.thread = threading.Thread(target=self._read, daemon=True)
         self.thread.start()
 
@@ -137,6 +140,15 @@ class RpcDriver:
         self.process.stdin.flush()
 
     def prompt(self, message: str):
+        if self.test_failures > 0:
+            self.test_original_prompt = self.test_original_prompt or message
+            self.test_failures -= 1
+            self.events.put({'type': 'message_end', 'message': {'role': 'assistant', 'stopReason': 'error',
+                                                                   'errorMessage': 'synthetic 429 rate limit (test only)'}})
+            self.events.put({'type': 'agent_settled'})
+            return
+        if self.test_original_prompt is not None:
+            message, self.test_original_prompt = self.test_original_prompt, None
         self.send({'id': uuid.uuid4().hex, 'type': 'prompt', 'message': message})
 
     def wait_idle(self, timeout: float):

@@ -1,0 +1,1 @@
+[study harness] Infrastructure notice (sent identically to every session): {lost} of session time was lost to API rate limiting. Your deadline is extended to {deadline_utc}. Time remaining: {remaining}.

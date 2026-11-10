@@ -68,7 +68,8 @@ watcher/watchdog outages between checks are possible.
   State, proxy logs, CA keys and helper logs stay under the run's `state/`.
   `TASK.md`, `output/`, and (when available in the root or image) `TOOLKIT.md`
   are seeded in the workspace. The launch receipt records the selected image.
-- `status [--run R]` — all runs, or one run's status.json plus supervisor liveness.
+- `status [--run R]` — all runs, or one run's status.json plus supervisor liveness. The effective deadline, original deadline and total extension seconds are recorded in status.
+- `extend --run R --seconds S --reason TEXT` — append a positive finite number of seconds to the host-owned extension ledger and log an infrastructure intervention. The supervisor picks it up on its next tick; `state/deadline.json` publishes the effective deadline atomically to subagents. An automatic rate-limit outage runs from the first classified failure to the next successful model progress; a fixed notice is sent after recovery. During an unresolved outage the supervisor and subagents wait for recovery rather than freezing at the unextended deadline. Stop remains available for operator action.
 - `intervene --run R --kind infra|message --note TEXT` — logged; `message` is
   delivered as a Pi steer (or prompt when idle).
 - `stop --run R --reason TEXT` — writes control/STOP_REQUEST.json; supervisor freezes.

@@ -39,6 +39,7 @@ class Inputs:
     system_prompt: str
     launch_template: str
     continuation_template: str
+    extension_template: str
     weight_sentence: str
     hashes: dict[str, str]
 
@@ -66,6 +67,7 @@ def load_inputs(root: Path, arm: str, *, allow_test_model: bool = False) -> Inpu
         'arm': root / '.pi' / 'agents' / ('wsp-redteam.md' if arm == 'R' else f'wsp-arm-{arm.lower()}.md'),
         'launch': root / '.pi' / 'prompts' / ('wsp-redteam.md' if arm == 'R' else 'wsp-launch.md'),
         'continue': root / '.pi' / 'prompts' / 'wsp-continue.md',
+        'extension': root / '.pi' / 'prompts' / 'wsp-extension.md',
         'weights': root / '.pi' / 'prompts' / 'weight-sentences.json',
     }
     raw = {name: path.read_bytes() for name, path in paths.items()}
@@ -96,5 +98,5 @@ def load_inputs(root: Path, arm: str, *, allow_test_model: bool = False) -> Inpu
     if arm == 'R' and allow_test_model:
         model = 'anthropic/claude-haiku-5-5'
     return Inputs(model, thinking, tuple(tools), match.group(2),
-                  raw['launch'].decode('utf-8'), raw['continue'].decode('utf-8'),
+                  raw['launch'].decode('utf-8'), raw['continue'].decode('utf-8'), raw['extension'].decode('utf-8'),
                   '' if arm == 'R' else weights[arm], {name: digest(data) for name, data in raw.items()})

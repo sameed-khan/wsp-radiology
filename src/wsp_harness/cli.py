@@ -13,6 +13,7 @@ import sys
 import time
 import uuid
 
+from . import deadline
 from .evidence import sha256, verify_events
 from .run import HOST_ENV, REPO, create_run, utc
 
@@ -157,6 +158,22 @@ def cmd_intervene(args) -> int:
         os.replace(tmp, folder / name)  # publish after logging
     else:
         _append_intervention(run, **record)
+    print(json.dumps(record))
+    return 0
+
+
+def cmd_extend(args) -> int:
+    run = _run_dir(args)
+    if not args.reason.strip():
+        raise SystemExit('error: --reason must not be empty')
+    record = {'time_utc': utc(datetime.now(timezone.utc)), 'seconds': args.seconds,
+              'reason': args.reason, 'kind': 'orchestrator', 'outage_start_utc': None, 'outage_end_utc': None}
+    try:
+        deadline.append(run, record)
+    except ValueError as exc:
+        raise SystemExit(f'error: {exc}') from exc
+    _append_intervention(run, kind='infra', event='deadline-extension', by='orchestrator',
+                         seconds=args.seconds, note=args.reason)
     print(json.dumps(record))
     return 0
 
@@ -557,6 +574,8 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser('intervene'); s.add_argument('--run', required=True)
     s.add_argument('--kind', required=True, choices=['infra', 'message']); s.add_argument('--note', required=True)
     s.set_defaults(func=cmd_intervene)
+    s = sub.add_parser('extend'); s.add_argument('--run', required=True); s.add_argument('--seconds', type=float, required=True)
+    s.add_argument('--reason', required=True); s.set_defaults(func=cmd_extend)
     s = sub.add_parser('stop'); s.add_argument('--run', required=True); s.add_argument('--reason', required=True)
     s.set_defaults(func=cmd_stop)
     s = sub.add_parser('verify'); s.add_argument('--run', required=True); s.set_defaults(func=cmd_verify)
