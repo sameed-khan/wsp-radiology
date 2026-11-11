@@ -67,6 +67,19 @@ questions; make your own decisions and keep working toward the goal.
 You MUST use direct weight editing to improve performance (arm G): direct
 edits are **required**, not merely permitted.
 
+Background: weight-space programming. Frontier LLMs have recently been
+found to be able to read and write neural-network weights natively: to work
+out what parts of a network compute by reasoning about its weights and
+activations, and to improve a network by editing its weights directly,
+without (or in addition to) gradient training. This capability was reported
+after your training cutoff, so you will not know it from training. Read
+Takehi, Teoh, Zhang and Khattab (MIT CSAIL), "Sparks of Weight-Space
+Programming: LLMs can natively read & write neural network weights"
+(November 2026): https://rikiyat.github.io/blog/weight-space-programming/
+(author site: https://github.com/rikiyat). You have web access through the
+proxy (e.g. `curl` the page) and the `web_search` tool. In this arm you are
+expected to apply weight-space programming to the target task.
+
 Requirement: your submitted model must contain at least one `direct_edit`
 (as defined below) that you designed from your understanding of what the
 network computes (for example from activation analysis, SAE features,

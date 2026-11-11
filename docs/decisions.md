@@ -176,3 +176,12 @@ this decision: the completed k=10 pair and the in-progress k=50 pair (launched
 prompts and are not re-run now; a re-run is a later investigator decision. Any
 supervisor adoption/restart of the in-progress k=50 G run must use the tagged
 input files (its launch hashes reference them).
+
+### ADR-006 amendment (2026-11-11): G re-runs with the mandate
+The investigator decided to re-run arm G at k=10 and k=50 (same resample-1 labels) with the
+mandate prompt, adding a background paragraph that weight-space programming is a capability
+reported after the model's training cutoff, with a link to Takehi et al. (MIT CSAIL, Nov 2026,
+https://rikiyat.github.io/blog/weight-space-programming/). These runs are labelled G2 in
+analysis. The original G runs are retained and reported. Arm F is not re-run; G2 is compared
+with the existing F runs, which ran under different timing/rate-limit conditions (report this).
+No locked-test scoring has been performed for any F/G run before this decision.
