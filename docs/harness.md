@@ -94,3 +94,13 @@ Legacy launches without the new extension prompt hash still validate every origi
 ## Tests
 `uv run --extra test pytest -q` (offline). Paid/Docker: `WSP_LIVE=1 uv run --extra test pytest -q tests/test_harness_run.py tests/test_harness_supervisor.py tests/test_harness_cli.py tests/test_harness_e2e.py`;
 other opt-in tests: `WSP_LIVE_CONTAINER_TEST`, `WSP_LIVE_SUBAGENT_TEST`, `WSP_LIVE_SNAPSHOT_TEST`.
+
+## Rate-limit / subscription-quota policy (ADR-005, investigator requirement 2026-11-11)
+
+When a model call fails with a rate-limit or quota error (429, rate_limit_error, usage limit,
+quota, too many requests, overloaded/529, ...), the supervisor opens an outage, keeps retrying
+with exponential backoff capped at 15 minutes (so at least one attempt every 30 minutes), with
+no attempt limit, and does not freeze at the deadline while the outage is open. This guarantees
+retries across at least a full 5-hour subscription window. On the first successful model output
+the whole outage (first failure to recovery) is added to the deadline and the agent receives the
+fixed extension notice.

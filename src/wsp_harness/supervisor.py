@@ -31,7 +31,13 @@ def _now() -> datetime:
 
 def is_rate_limit(error: object) -> bool:
     text = str(error).lower()
-    return any(term in text for term in ('429', 'rate_limit_error', 'rate limit', 'usage limit', 'overloaded', '529'))
+    # Subscription quota (e.g. the 5-hour window) and provider throttling. While such an outage
+    # is open the supervisor keeps retrying (at most every retry_cap seconds, no attempt limit),
+    # never freezes at the deadline, and credits the whole outage to the deadline on recovery
+    # (ADR-005; investigator requirement 2026-11-11: retry for at least 5 h, every <= 30 min).
+    return any(term in text for term in ('429', 'rate_limit_error', 'rate limit', 'rate-limit', 'usage limit',
+                                         'overloaded', '529', 'quota', 'limit reached', 'too many requests',
+                                         'try again later'))
 
 
 def _remaining(seconds: float) -> str:

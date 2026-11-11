@@ -13,7 +13,9 @@ from wsp_harness.supervisor import Supervisor, is_rate_limit
 from test_harness_supervisor import setup
 
 
-@pytest.mark.parametrize('text', ['HTTP 429', 'rate_limit_error', 'RATE LIMIT', 'usage limit', 'Overloaded', '529'])
+@pytest.mark.parametrize('text', ['HTTP 429', 'rate_limit_error', 'RATE LIMIT', 'usage limit', 'Overloaded', '529',
+                                  'Claude usage limit reached. Your limit will reset at 5pm',
+                                  'Quota exceeded for this period', 'Too Many Requests', 'Please try again later.'])
 def test_classification(text):
     assert is_rate_limit(text)
     assert not is_rate_limit('connection reset')
@@ -85,3 +87,14 @@ def test_live_extensions(tmp_path, sae_fixture, monkeypatch):
         if thread.is_alive():
             (run / 'control/STOP_REQUEST.json').write_text('{"reason":"cleanup"}')
             thread.join(60)
+
+
+def test_retry_policy_meets_five_hour_requirement():
+    import inspect
+    sig = inspect.signature(Supervisor.__init__)
+    cap = sig.parameters['retry_cap'].default
+    assert cap <= 1800  # at least one retry every 30 min
+    # no attempt limit: retries continue for any outage length (>= 5 h)
+    src = inspect.getsource(Supervisor)
+    assert 'max_retries' not in src
+    assert 'now >= self.deadline and self.outage_start is None' in src  # no freeze during an open outage
