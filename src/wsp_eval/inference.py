@@ -18,7 +18,12 @@ def docker_args(image, name, workspace, images, output, models):
             '--user', '1004:1004', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
             '--read-only', '--tmpfs', '/tmp:rw,nosuid,nodev,size=16g', '--shm-size', '16g',
             '--pids-limit', '4096', '--memory', '28g', '--cpus', '10',
-            '--env', 'HOME=/tmp', '--workdir', '/workspace',
+            # Same HOME as during the session so `pip install --user` packages remain importable;
+            # caches go to tmpfs because /workspace is read-only here.
+            '--env', 'HOME=/workspace/home', '--env', 'XDG_CACHE_HOME=/tmp/.cache',
+            '--env', 'HF_HOME=/tmp/hf', '--env', 'HF_HUB_OFFLINE=1', '--env', 'TRANSFORMERS_OFFLINE=1',
+            '--env', 'MPLCONFIGDIR=/tmp/mpl', '--env', 'PYTHONDONTWRITEBYTECODE=1',
+            '--workdir', '/workspace',
             '--mount', mount(workspace, '/workspace', True),
             '--mount', mount(images, '/eval/images', True),
             '--mount', mount(output, '/eval/out'),
