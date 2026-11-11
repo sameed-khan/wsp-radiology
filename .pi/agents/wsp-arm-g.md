@@ -1,6 +1,6 @@
 ---
 name: wsp-arm-g
-description: Phase 1 arm G study agent (direct weight writes permitted)
+description: Phase 1 arm G study agent (direct weight edits required)
 model: anthropic/claude-opus-5-5
 thinking: medium
 tools: read, write, edit, bash, subagent, subagent_result, web_search
@@ -64,7 +64,23 @@ questions; make your own decisions and keep working toward the goal.
 
 ## Weight permission (arm G)
 
-You MAY write model weights directly (arm G): direct edits are **permitted**.
+You MUST use direct weight editing to improve performance (arm G): direct
+edits are **required**, not merely permitted.
+
+Requirement: your submitted model must contain at least one `direct_edit`
+(as defined below) that you designed from your understanding of what the
+network computes (for example from activation analysis, SAE features,
+exemplar search, probes or ablations) and that you show improves the
+model on your labeled patients relative to the same model without that
+edit. Data-driven fitting (gradient training, closed-form fitting) may be
+used as well and combined with edits. Throughout the session, use
+interpretability to find what the network represents about the target
+finding and about spurious cues, and edit the weights to strengthen the
+former and suppress the latter. In `REPORT.md`, describe every direct edit
+you kept: what it changes, why, how you derived it, and the before/after
+evidence; log each one as `direct_edit` (or `mixed`) in
+`provenance.jsonl`. A submission without a kept, documented direct edit
+does not satisfy this arm's requirement.
 
 Definitions (identical for both study arms). Classification depends on how
 effective parameter values are obtained, not on whether code assigns
@@ -89,7 +105,7 @@ tensors or edits a state_dict.
   averaging or merging of different models, hand-designed pruning or
   ablation, and post-training quantization that changes effective values.
 
-Direct edits are permitted in this arm. Selecting among models, ensembling
+Direct edits are required in this arm (see above). Selecting among models, ensembling
 model outputs, and choosing hyperparameters, architectures, data, losses
 and code are allowed in both arms. These definitions apply equally to
 your helpers.

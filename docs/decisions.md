@@ -160,3 +160,19 @@ deadline by the measured duration, logs it as an automatic infrastructure event 
 sends the agent a fixed, preregistered notice with the new deadline (no task advice).
 The k=10 sessions launched 2026-11-10 lost about 2.5 h each (18:26 to ~20:55 UTC) and
 are extended retroactively by their measured outages.
+
+## ADR-006: Arm G mandates direct weight editing (future launches)
+
+**Status:** accepted by the investigator, 2026-11-11.
+
+After the k=10 pair, arm G had made no direct weight edits despite permission, so
+the G-F contrast measured nothing about weight-space programming. The investigator
+changed arm G's definition and weight sentence to REQUIRE at least one kept,
+documented, interpretability-derived direct edit that improves the model on the
+labeled patients. Arm F is unchanged (direct edits prohibited). This changes the
+manipulation from "permission" to "requirement" and applies only to launches after
+this decision: the completed k=10 pair and the in-progress k=50 pair (launched
+2026-11-10T22:04Z under tag `phase1-launch-freeze-k50`) keep their original
+prompts and are not re-run now; a re-run is a later investigator decision. Any
+supervisor adoption/restart of the in-progress k=50 G run must use the tagged
+input files (its launch hashes reference them).
