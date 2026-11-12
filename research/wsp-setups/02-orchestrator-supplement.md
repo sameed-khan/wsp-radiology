@@ -1,0 +1,16 @@
+# Orchestrator supplement to the Opus brainstorm (S1–S44)
+
+Additional practitioner situations, numbered S45 onwards. The investigator does NOT want shortcut-removal framings. Distribution shift and natural-image to medical domain gap are preferred.
+
+- **S45. Foundation-model version upgrade (backbone v1 → v2).** A site has a task head or adapter built on backbone v1, and the vendor ships v2. F re-fine-tunes on the small local set. G ports the head or adapter through representation alignment, for example by stitching or by a closed-form map edited into the weights. Metric: target performance recovered with k labels, and the cost of doing it.
+- **S46. Clinical guideline or classification-system revision** (for example a new LI-RADS, TI-RADS, Bosniak, BI-RADS or Fleischner version, or a revised fracture classification). Update a deployed classifier or radiology LLM to the new criteria with few examples. G uses knowledge editing (ROME/MEMIT-style), F uses fine-tuning. Metric: accuracy on cases where the new criteria change the label; preservation elsewhere.
+- **S47. Generalist medical VLM → specialist task.** For example, a MedGemma-class or other open generalist VLM adapted to a narrow radiology task. Compare full or LoRA fine-tuning against edits derived from the model's own internal concept directions. Covers both image and report inputs.
+- **S48. Multilingual or cross-country report models.** A report labeller or summariser trained on English reports, deployed on reports in another language or from another health system. Edits apply cross-lingual concept directions.
+- **S49. New hardware or imaging technology arriving at a site** (photon-counting CT, low-field or portable MRI, a new detector, AI-reconstructed images, synthetic CT). The deployed model must work on the new images with few paired or unpaired examples.
+- **S50. New contrast agent, tracer or protocol** (for example a new PET tracer or an abbreviated MRI protocol with missing sequences). Adapt a multi-input model to missing or new channels.
+- **S51. Weak or noisy labels from report NLP or an LLM labeller.** Training labels are extracted from reports and contain systematic errors. Can edits based on interpretable error directions beat noise-robust training?
+- **S52. Pediatric ↔ adult and geographic or low-resource-setting transfer** (for example a model built on high-income-country data deployed in another region with different disease prevalence and equipment). Overlaps with S30, but adds geographic and equipment shift.
+- **S53. Compute- or data-access-restricted adaptation.** The deployment site may share only model activations or aggregate statistics, not images (privacy). A closed-form statistics-based edit (G) versus federated or limited fine-tuning (F).
+- **S54. Triage operating-point and worklist policy change.** A sensitivity target is raised for one subgroup or one finding without disturbing others. This tests local, auditable edits.
+- **S55. Longitudinal or prior-comparison tasks** (change detection between studies). Complements S44.
+- **S56. 3D foundation-model segmentation** (for example a recent CT or MRI foundation segmenter) extended to a new organ, lesion or modality.
