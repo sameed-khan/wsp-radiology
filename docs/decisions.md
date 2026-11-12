@@ -196,3 +196,11 @@ remain Haiku 5.5 only (ADR-002). The harness gains an allowlisted per-launch par
 (`wsp-harness launch --model`, recorded in launch.json as `model_override`). These runs are labelled
 F-fable in analysis; they ran after the Opus F/G/G2 runs, under different timing/rate-limit conditions,
 and after the investigator had seen locked-test results of earlier runs (post-hoc, reported as such).
+
+### ADR-007 amendment (2026-11-12): Fable is for the weight-editing arm
+The investigator intended Fable 5.2 for the weight-editing arm, not arm F. The two F-fable runs
+(20261112t002805-a688e35ba915, k=10; 20261112t002809-e0fcd911ac31, k=50) were paused at 08:05Z after
+~7.6 h: supervisors detached, workspace snapshots taken, containers stopped (not removed). They may be
+resumed later (docker start + adopt, deadline extended by the paused duration) as the control if
+Fable-G2 shows better weight editing than Opus G2. Fable-G2 = arm G with the ADR-006 mandate prompt and
+`anthropic/claude-fable-5-2` as parent model, k=10 and k=50, resample-1 labels.
