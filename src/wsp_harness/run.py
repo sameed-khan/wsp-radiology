@@ -31,7 +31,7 @@ def utc(dt: datetime) -> str:
 
 
 def create_run(root: Path, arm: str, k: int, labels_dir: Path, pool_dir: Path,
-               hours: float, test_model: bool = False, image: str = IMAGE) -> Path:
+               hours: float, test_model: bool = False, image: str = IMAGE, model: str | None = None) -> Path:
     root, labels_dir, pool_dir = map(lambda p: Path(p).resolve(), (root, labels_dir, pool_dir))
     if not math.isfinite(hours) or hours <= 0:
         raise ValueError('hours must be positive and finite')
@@ -53,7 +53,7 @@ def create_run(root: Path, arm: str, k: int, labels_dir: Path, pool_dir: Path,
     if arm.upper() in ('F', 'G') or sae_present:
         validate_package(sae_source)
     labels_hash = sha256(labels_dir / 'labels.csv')
-    inputs = load_inputs(root, arm, allow_test_model=test_model)
+    inputs = load_inputs(root, arm, allow_test_model=test_model, model_override=model)
     image_id = subprocess.check_output(['docker', 'image', 'inspect', image, '--format', '{{.Id}}'], text=True).strip()
     revision = subprocess.check_output(['git', '-C', str(REPO), 'rev-parse', 'HEAD'], text=True).strip()
     now = datetime.now(timezone.utc)
@@ -79,7 +79,8 @@ def create_run(root: Path, arm: str, k: int, labels_dir: Path, pool_dir: Path,
               'labels_sha256': labels_hash, 'labels_dir': str(labels_dir), 'pool_dir': str(pool_dir),
               'start_utc': utc(now), 'deadline_utc': utc(deadline), 'deadline_epoch': deadline.timestamp(),
               'launch_prompt': prompt, 'launch_prompt_sha256': digest(prompt.encode()),
-              'n_pool': values['n_pool'], 'image': image, 'image_id': image_id, 'test_model': test_model}
+              'n_pool': values['n_pool'], 'image': image, 'image_id': image_id, 'test_model': test_model,
+              'model_override': model}
     (run / 'launch.json').write_text(json.dumps(launch, indent=2) + '\n')
     (run / 'interventions.jsonl').touch(mode=0o600)
     (run / 'workspace/TASK.md').write_text(prompt)

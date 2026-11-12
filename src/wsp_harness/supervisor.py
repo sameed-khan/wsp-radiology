@@ -55,7 +55,8 @@ class Supervisor:
         self.adopt = adopt
         expected = self.launch['input_hashes']
         legacy = adopt and 'extension' not in expected
-        self.inputs = load_inputs(self.root, self.launch['arm'], allow_test_model=self.launch['test_model'], legacy_extension=legacy)
+        self.inputs = load_inputs(self.root, self.launch['arm'], allow_test_model=self.launch['test_model'], legacy_extension=legacy,
+                                  model_override=self.launch.get('model_override'))
         actual = {k: v for k, v in self.inputs.hashes.items() if not (legacy and k == 'extension')}
         if actual != expected:
             raise RuntimeError('preregistered inputs changed since launch.json was written')

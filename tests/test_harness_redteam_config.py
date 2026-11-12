@@ -22,3 +22,10 @@ def test_redteam_test_model_is_haiku():
 def test_unknown_arm_rejected():
     with pytest.raises(ValueError):
         load_inputs(ROOT, 'X')
+
+
+def test_parent_model_override_allowlist():
+    assert load_inputs(ROOT, 'F', model_override='anthropic/claude-fable-5-2').model == 'anthropic/claude-fable-5-2'
+    assert load_inputs(ROOT, 'F').model == 'anthropic/claude-opus-5-5'
+    with pytest.raises(ValueError):
+        load_inputs(ROOT, 'F', model_override='anthropic/claude-haiku-5-5')

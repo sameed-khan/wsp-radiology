@@ -59,7 +59,12 @@ def pi_argv(inputs: Inputs, repo: Path, recorder: Path) -> list[str]:
     ]
 
 
-def load_inputs(root: Path, arm: str, *, allow_test_model: bool = False, legacy_extension: bool = False) -> Inputs:
+# Parent models an investigator may select per launch (ADR-007); the arm definition's model is the default.
+PARENT_MODELS = frozenset({'anthropic/claude-opus-5-5', 'anthropic/claude-fable-5-2'})
+
+
+def load_inputs(root: Path, arm: str, *, allow_test_model: bool = False, legacy_extension: bool = False,
+                model_override: str | None = None) -> Inputs:
     arm = arm.upper()
     if arm not in {'F', 'G', 'R'}:
         raise ValueError('arm must be F, G or R')
@@ -99,6 +104,10 @@ def load_inputs(root: Path, arm: str, *, allow_test_model: bool = False, legacy_
         raise ValueError('missing weight sentence')
     if arm == 'R' and allow_test_model:
         model = 'anthropic/claude-haiku-5-5'
+    if model_override is not None:
+        if model_override not in PARENT_MODELS:
+            raise ValueError('unsupported parent model override')
+        model = model_override
     return Inputs(model, thinking, tuple(tools), match.group(2),
                   raw['launch'].decode('utf-8'), raw['continue'].decode('utf-8'), raw['extension'].decode('utf-8'),
                   '' if arm == 'R' else weights[arm], {name: digest(data) for name, data in raw.items()})

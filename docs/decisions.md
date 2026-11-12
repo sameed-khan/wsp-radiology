@@ -185,3 +185,14 @@ https://rikiyat.github.io/blog/weight-space-programming/). These runs are labell
 analysis. The original G runs are retained and reported. Arm F is not re-run; G2 is compared
 with the existing F runs, which ran under different timing/rate-limit conditions (report this).
 No locked-test scoring has been performed for any F/G run before this decision.
+
+## ADR-007: Arm F re-run with Claude Fable 5.2 as the parent model
+
+**Status:** accepted by the investigator, 2026-11-11.
+
+Arm F is re-run at k=10 and k=50 (resample-1 labels, unchanged arm F definition and prompts) with
+`anthropic/claude-fable-5-2` (thinking medium) as the parent agent model instead of Opus 5.5; subagents
+remain Haiku 5.5 only (ADR-002). The harness gains an allowlisted per-launch parent-model override
+(`wsp-harness launch --model`, recorded in launch.json as `model_override`). These runs are labelled
+F-fable in analysis; they ran after the Opus F/G/G2 runs, under different timing/rate-limit conditions,
+and after the investigator had seen locked-test results of earlier runs (post-hoc, reported as such).

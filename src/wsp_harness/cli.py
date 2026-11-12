@@ -82,7 +82,8 @@ def cmd_launch(args) -> int:
         if missing:
             raise SystemExit('error: --backend infra needs ' + ', '.join('--' + m.replace('_', '-') for m in missing))
     run = create_run(root, args.arm, args.k, Path(args.labels), Path(args.pool), args.hours,
-                     test_model=args.test_model, image=args.image if args.backend == 'infra' else 'ubuntu:24.04')
+                     test_model=args.test_model, image=args.image if args.backend == 'infra' else 'ubuntu:24.04',
+                     model=args.model)
     if args.backend == 'infra':
         (run / 'state/backend.json').write_text(json.dumps({
             'models_dir': str(Path(args.models_dir).resolve()), 'external_dir': str(Path(args.external_dir).resolve()),
@@ -602,6 +603,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument('--hours', type=float, default=24.0)
     s.add_argument('--backend', choices=['simple', 'infra'], default='simple')
     s.add_argument('--test-model', action='store_true', help='allow the Haiku parent (tests only)')
+    s.add_argument('--model', default=None, help='parent model override (allowlisted: anthropic/claude-opus-5-5, anthropic/claude-fable-5-2)')
     s.add_argument('--daemonizer', choices=['setsid', 'systemd'], default='setsid')
     s.add_argument('--continue-after', type=float, default=300.0)
     s.add_argument('--snapshot-interval', type=float, default=3600.0)
