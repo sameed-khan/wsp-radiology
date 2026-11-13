@@ -118,3 +118,23 @@ Per the investigator, no per-edit reversion ablations were run (quick read only)
 | Fable-G2 − D-ft SKELEX (r1) | −0.019 [−0.040, 0.001] | −0.078 [−0.108, −0.050] |
 
 Excluding the 7 overlap images changes no estimate by more than 0.002.
+
+### Fable-G2 k=10 edit reversion (added 2026-11-12)
+
+| Variant | Test AUROC |
+|---|---|
+| As submitted (head rescale + cast neuron) | 0.892 |
+| Cast neuron removed | 0.893 |
+| Both edits removed | 0.893 |
+
+Both edits − no edits: −0.001 [−0.003, 0.001]. The head rescale (×2 weight, +1.8 bias, identical on all
+members, neuron gain scaled to match) is a monotone transform of the final score and cannot change AUROC.
+No-edit model − D-ft SKELEX (r1): −0.018 [−0.039, 0.002].
+
+## Study status (2026-11-12)
+
+Concluded by the investigator after the pilot: mandated interpretability-derived edits added no measurable
+test AUROC in any run (Opus G2 k=10 −0.019; Fable-G2 k=10 −0.001); gains came from label sources
+(agent image reading, Opus pseudo-labels) and ordinary fine-tuning. F-fable runs remain paused (not scored);
+the Fable arm-D pseudo-label contamination check was stopped with a partial cache (733/2,993; not analysed).
+A redesign catalogue for any future study is in `research/wsp-experimental-setups.md`.
