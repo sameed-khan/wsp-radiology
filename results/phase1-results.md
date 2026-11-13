@@ -99,3 +99,22 @@ No orchestrator task advice was given; interventions were infrastructure notes o
   weight-averaging/task-vector amplification raised it (+0.018).
 - Per plan §10, with one resample per k the recommended next step if the gate is in doubt is more
   resamples/budgets in Phase 1 before deciding on Phase 2.
+
+## Fable-G2 (ADR-007 amendment; added 2026-11-12)
+
+Arm G with the ADR-006 edit mandate, parent model Claude Fable 5.2 (medium), resample-1 labels.
+Per the investigator, no per-edit reversion ablations were run (quick read only).
+
+| Run | k | Test AUROC | Patient AUROC | Sens / Spec | Kept direct edits | Also in submission |
+|---|---|---|---|---|---|---|
+| Fable-G2 | 10 | **0.892 [0.863, 0.917]** | 0.871 | 0.80 / 0.82 | SAE-derived "mesh-cast" neuron inserted as extra logit branch; hand-set head rescale | own reads of ~2,100 pool images; LoRA ×3 encoders; crop-link logit averaging |
+| Fable-G2 | 50 | 0.836 [0.804, 0.865] | 0.871 | 0.79 / 0.72 | SKELEX last-block attention-output ablation | frozen 3-encoder probes + co-training; crop-group averaging |
+
+| Contrast (paired) | k=10 ΔAUROC | k=50 ΔAUROC |
+|---|---|---|
+| Fable-G2 − Opus G2 | **+0.232 [0.197, 0.270]** | −0.030 [−0.047, −0.015] |
+| Fable-G2 − Opus F | +0.293 [0.251, 0.332] | −0.032 [−0.043, −0.022] |
+| Fable-G2 − Opus G | +0.134 [0.112, 0.155] | −0.056 [−0.067, −0.046] |
+| Fable-G2 − D-ft SKELEX (r1) | −0.019 [−0.040, 0.001] | −0.078 [−0.108, −0.050] |
+
+Excluding the 7 overlap images changes no estimate by more than 0.002.
